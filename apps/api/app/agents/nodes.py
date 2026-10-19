@@ -393,12 +393,14 @@ async def execute_action(state: RevenueRecoveryState, config: RunnableConfig) ->
     elif action == ActionType.ESCALATE_TO_MANAGER:
         ok = await run("escalate_to_manager", {"opportunity_id": state["opportunity_id"], "recommendation_id": rid,
                                                "title": f"Manager review: {state['recommendation']['title'][:150]}", "due_in_hours": 24})
-    if ok and primary.get("email_body") and primary.get("to") and action in (ActionType.SEND_EMAIL, ActionType.OFFER_DISCOUNT):
+    wants_email = bool(primary.get("email_body")) and action in (ActionType.SEND_EMAIL, ActionType.OFFER_DISCOUNT)
+    if ok and wants_email and primary.get("to"):
         ok = await run("send_email", {"recommendation_id": rid, "approval_request_id": approval_id, "to": primary["to"],
                                       "subject": primary["email_subject"], "body": primary["email_body"]})
-    elif action == ActionType.SEND_EMAIL and not primary.get("to"):
-        ok = False
-        results.append({"tool": "send_email", "ok": False, "error": {"message": "No contact email on the opportunity"}})
+    elif ok and wants_email:
+        ok = False  # never skip silently: the approved email could not be sent
+        results.append({"tool": "send_email", "ok": False,
+                        "error": {"message": "No contact email on the opportunity; add a contact and re-run"}})
 
     rec = await ctx.session.get(m.Recommendation, uuid.UUID(rid))
     if rec is not None:

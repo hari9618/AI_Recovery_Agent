@@ -138,6 +138,7 @@ async def build_signals(
     opportunity_ids: list[uuid.UUID] | None = None,
 ) -> dict[uuid.UUID, tuple[m.Opportunity, RiskSignals]]:
     now = now or datetime.now(UTC)
+    await session.flush()  # sessions run with autoflush off; make pending CRM writes visible to these queries
     opp_q = select(m.Opportunity).where(m.Opportunity.company_id == company_id, m.Opportunity.stage.in_(OPEN_STAGES))
     if opportunity_ids:
         opp_q = opp_q.where(m.Opportunity.id.in_(opportunity_ids))
@@ -200,8 +201,11 @@ async def build_signals(
     result: dict[uuid.UUID, tuple[m.Opportunity, RiskSignals]] = {}
     for opp in opps:
         opp_msgs = sorted((msg for c in convs_by_opp[opp.id] for msg in messages[c.id]), key=lambda x: x.sent_at)
+        quote = quotes_by_opp.get(opp.id)
         rep_times = [x.sent_at for x in opp_msgs if x.sender_type == SenderType.REP]
-        last_rep = max([t for t in (rep_touch.get(opp.id), max(rep_times, default=None)) if t], default=None)
+        # Rep touches: logged calls/emails/meetings, rep messages, and sending a quotation.
+        candidates = (rep_touch.get(opp.id), max(rep_times, default=None), quote.sent_at if quote else None)
+        last_rep = max([t for t in candidates if t], default=None)
         # Customer is waiting if their messages came after our last reply.
         waiting_since = next(
             (x.sent_at for x in opp_msgs if x.sender_type == SenderType.CUSTOMER and (last_rep is None or x.sent_at > last_rep)),
@@ -216,7 +220,6 @@ async def build_signals(
                 heuristic_texts += [x.body for x in messages[c.id] if x.sender_type == SenderType.CUSTOMER]
         conv_sig = merge_conversation_signals(llm_insights, heuristic_texts, competitors)
 
-        quote = quotes_by_opp.get(opp.id)
         live = bool(quote and quote.status in LIVE_QUOTE_STATUSES)
         expiry_days = None
         if quote and quote.valid_until and quote.status in (*LIVE_QUOTE_STATUSES, QuoteStatus.EXPIRED):

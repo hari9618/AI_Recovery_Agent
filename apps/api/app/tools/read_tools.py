@@ -115,6 +115,11 @@ async def get_opportunity(ctx: ToolContext, a: OpportunityIn) -> OpportunityOut:
     customer = await ctx.session.get(m.Customer, o.customer_id)
     owner = await ctx.session.get(m.User, o.owner_id) if o.owner_id else None
     contact = await ctx.session.get(m.Contact, o.primary_contact_id) if o.primary_contact_id else None
+    if contact is None or not contact.email:
+        contact = await ctx.session.scalar(
+            select(m.Contact).where(m.Contact.customer_id == o.customer_id, m.Contact.email.is_not(None))
+            .order_by(m.Contact.is_decision_maker.desc(), m.Contact.created_at).limit(1)
+        ) or contact
     quote = await ctx.session.scalar(
         select(m.Quote).where(m.Quote.opportunity_id == o.id).order_by(m.Quote.version.desc(), m.Quote.sent_at.desc().nulls_last()).limit(1)
     )

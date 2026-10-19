@@ -9,9 +9,24 @@ from app.core.errors import ErrorCode, LLMError
 from app.llm.base import LLMProvider
 
 
-@lru_cache
+_override: LLMProvider | None = None
+
+
+def set_llm_override(provider: LLMProvider | None) -> None:
+    """Replace the provider process-wide. Used ONLY by tests and the offline evaluation mode."""
+    global _override
+    _override = provider
+
+
 def get_llm_provider() -> LLMProvider:
     """Return the configured provider or raise LLM_NOT_CONFIGURED (callers degrade gracefully)."""
+    if _override is not None:
+        return _override
+    return _configured_provider()
+
+
+@lru_cache
+def _configured_provider() -> LLMProvider:
     settings = get_settings()
     if not settings.llm_configured:
         raise LLMError(ErrorCode.LLM_NOT_CONFIGURED, "No LLM configured: set GROQ_API_KEY and GROQ_MODEL")

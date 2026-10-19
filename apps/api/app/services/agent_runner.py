@@ -13,6 +13,7 @@ import logging
 import time
 import uuid
 from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import func, select
@@ -24,6 +25,7 @@ from app.core.errors import AppError, ErrorCode, NotFoundError
 from app.db import models as m
 from app.db.session import get_sessionmaker
 from app.domain.enums import (
+    ActionType,
     ActorType,
     AgentRunStatus,
     ApprovalStatus,
@@ -31,10 +33,12 @@ from app.domain.enums import (
     RecommendationStatus,
     UserRole,
 )
+from app.domain.policy import ActionProposal, evaluate
 from app.llm.ledger import llm_call_context
 from app.observability.tracing import get_tracer
 from app.security.auth import Principal
 from app.services.audit import record_audit
+from app.services.company import get_company_settings
 from app.tools import ToolContext, ToolDeps
 
 logger = logging.getLogger(__name__)
@@ -206,6 +210,17 @@ async def decide_approval(
                 rec.draft_subject = allowed["email_subject"]
             if "email_body" in allowed:
                 rec.draft_body = allowed["email_body"]
+            if "discount_pct" in allowed and primary.get("action_type") == ActionType.OFFER_DISCOUNT.value:
+                # A human edit is still subject to policy: re-evaluate the authority needed for the new discount.
+                opp = await session.get(m.Opportunity, rec.opportunity_id)
+                settings = await get_company_settings(session, principal.company_id)
+                recheck = evaluate(ActionProposal(ActionType.OFFER_DISCOUNT, deal_value=opp.amount if opp else Decimal("0"),
+                                                  discount_pct=Decimal(str(allowed["discount_pct"]))), settings.policy)
+                if not recheck.allowed:
+                    raise AppError(ErrorCode.POLICY_BLOCKED, "; ".join(f["message"] for f in recheck.reasons))
+                if recheck.required_role and _ROLE_RANK[principal.role] < _ROLE_RANK[recheck.required_role]:
+                    raise AppError(ErrorCode.FORBIDDEN, f"An edited discount of {allowed['discount_pct']}% requires role "
+                                                        f"{recheck.required_role.value}")
         approval.status, rec.status = ApprovalStatus.APPROVED, RecommendationStatus.APPROVED
         record_audit(session, company_id=principal.company_id, action="approval.approved", actor_type=ActorType.USER,
                      actor_id=str(principal.user_id), actor_name=principal.name, entity_type="approval_request", entity_id=approval.id,

@@ -18,6 +18,7 @@ from typing import Any, Literal
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.errors import LLMError
 from app.domain.enums import DocumentType
 from app.llm.base import LLMProvider, LLMUsage
 from app.llm.structured import generate_structured
@@ -154,8 +155,14 @@ async def answer_with_citations(
                               limitations + ["LLM not configured: showing retrieved evidence only."], retrieval=retrieval)
 
     with get_tracer().observation("grounded_answer", as_type="chain", input={"question": question}) as span:
-        result = await generate_structured(provider, build_messages(question, format_evidence(usable), business_context),
-                                           LLMGroundedAnswer, purpose="grounded_answer", temperature=0.0)
+        try:
+            result = await generate_structured(provider, build_messages(question, format_evidence(usable), business_context),
+                                               LLMGroundedAnswer, purpose="grounded_answer", temperature=0.0)
+        except LLMError as exc:  # timeout / rate limit / outage: degrade to evidence-only, never fail the request
+            span.update(output={"status": "LLM_FALLBACK", "error": exc.code.value}, level="WARNING")
+            return GroundedAnswer(question, "LLM_FALLBACK", "", [], usable, withheld,
+                                  limitations + [f"LLM unavailable ({exc.code.value}); showing retrieved evidence only."],
+                                  retrieval=retrieval)
         if not result.ok or result.value is None:
             span.update(output={"status": "LLM_FALLBACK"}, level="WARNING")
             return GroundedAnswer(question, "LLM_FALLBACK", "", [], usable, withheld,
