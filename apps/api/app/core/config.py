@@ -69,7 +69,7 @@ class Settings(BaseSettings):
     reranker_model: str = "Xenova/ms-marco-MiniLM-L-6-v2"
     reranker_enabled: bool = True
     model_cache_dir: Path = REPO_ROOT / ".cache" / "models"
-    rag_candidate_k: int = 20
+    rag_candidate_k: int = 12
     rag_top_k: int = 5
     rag_rrf_k: int = 60
     rag_chunk_target_chars: int = 1200
@@ -78,6 +78,8 @@ class Settings(BaseSettings):
     rag_min_relevance: float = 0.2
     # Minimum claim↔evidence cosine similarity for a citation to count as supported.
     rag_min_claim_support: float = 0.55
+    # Withhold chunks flagged by the injection scanner from LLM context (they stay visible in search).
+    rag_exclude_flagged_from_llm: bool = True
 
     # --- uploads -------------------------------------------------------------------------
     upload_max_bytes: int = 10 * 1024 * 1024
