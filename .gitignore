@@ -1,0 +1,36 @@
+# secrets
+.env
+.env.*
+!.env.example
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+
+# node
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+
+# local data / caches
+.devdb/
+.cache/
+uploads/
+*.log
+
+# eval run artefacts (reports are committed deliberately via evals/reports/README.md)
+evals/experiments/*.json
+!evals/experiments/.gitkeep
+
+# os / editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
