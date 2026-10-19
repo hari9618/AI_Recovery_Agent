@@ -1,0 +1,5 @@
+quote_number,customer_name,opportunity_name,total,subtotal,discount_pct,status,sent_at,valid_until
+Q-IMP-0001,Nilgiri Pharma Formulations Pvt Ltd,Nilgiri — cold-room monitoring,612000,,0,sent,2026-10-08,2026-11-07
+Q-IMP-0002,Kalinga Steel Fabricators Ltd,,1450000,1611111,10%,viewed,2026-09-28,
+Q-IMP-0003,Unknown Company Pvt Ltd,,250000,,0,sent,2026-10-01,
+Q-IMP-0004,Ratnagiri Cold Chain LLP,,-5000,,0,sent,2026-10-01,

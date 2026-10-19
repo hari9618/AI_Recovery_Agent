@@ -1,7 +1,9 @@
-import type { NextConfig } from "next";
+import type { NextConfig } from "next"
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Self-contained server bundle for the Docker image (apps/web/Dockerfile).
+  output: "standalone",
+  poweredByHeader: false,
   cacheComponents: true,
   partialPrefetching: true,
   turbopack: {
@@ -12,6 +14,6 @@ const nextConfig: NextConfig = {
       },
     },
   },
-};
+}
 
-export default nextConfig;
+export default nextConfig
