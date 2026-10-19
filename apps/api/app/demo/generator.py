@@ -90,11 +90,7 @@ class DemoDataset:
     ground_truth: dict[str, Any] = field(default_factory=dict)
 
     def counts(self) -> dict[str, int]:
-        return {
-            k: len(v)
-            for k, v in self.__dict__.items()
-            if isinstance(v, list)
-        }
+        return {k: len(v) for k, v in self.__dict__.items() if isinstance(v, list)}
 
 
 class DemoDataGenerator:
@@ -148,8 +144,15 @@ class DemoDataGenerator:
 
     def _build_users(self) -> None:
         def user(name: str, email: str, role: UserRole, region: str) -> Row:
-            return {**self._base(), "full_name": name, "email": email, "role": role, "region": region,
-                    "is_active": True, "api_token_hash": None}
+            return {
+                **self._base(),
+                "full_name": name,
+                "email": email,
+                "role": role,
+                "region": region,
+                "is_active": True,
+                "api_token_hash": None,
+            }
 
         name, email, _, region = cat.OWNER
         self.owner = user(name, email, UserRole.OWNER, region)
@@ -167,8 +170,14 @@ class DemoDataGenerator:
             self.reps_by_region.setdefault(rep["region"], []).append(rep)
 
     # ------------------------------------------------------------------ entities
-    def _new_customer(self, *, status: CustomerStatus, name: str | None = None, industry: str | None = None,
-                      city: tuple[str, str] | None = None) -> Row:
+    def _new_customer(
+        self,
+        *,
+        status: CustomerStatus,
+        name: str | None = None,
+        industry: str | None = None,
+        city: tuple[str, str] | None = None,
+    ) -> Row:
         industry = industry or self.rng.choice(list(cat.INDUSTRIES))
         if name is None:
             for _ in range(50):
@@ -186,8 +195,11 @@ class DemoDataGenerator:
         segment = self.rng.choices(
             (CustomerSegment.SMB, CustomerSegment.MID_MARKET, CustomerSegment.ENTERPRISE), (45, 40, 15)
         )[0]
-        employees = {CustomerSegment.SMB: (40, 250), CustomerSegment.MID_MARKET: (250, 1500),
-                     CustomerSegment.ENTERPRISE: (1500, 12000)}[segment]
+        employees = {
+            CustomerSegment.SMB: (40, 250),
+            CustomerSegment.MID_MARKET: (250, 1500),
+            CustomerSegment.ENTERPRISE: (1500, 12000),
+        }[segment]
         slug = re.sub(r"[^a-z]", "", name.lower().replace("pvt ltd", "").replace("llp", ""))[:22]
         customer = {
             **self._base(),
@@ -216,12 +228,14 @@ class DemoDataGenerator:
         customer["_contacts"] = contacts
         return customer
 
-    def _new_contact(self, customer: Row, *, decision_maker: bool, name: str | None = None,
-                     title: str | None = None) -> Row:
+    def _new_contact(
+        self, customer: Row, *, decision_maker: bool, name: str | None = None, title: str | None = None
+    ) -> Row:
         full_name = name or f"{self.fake.first_name()} {self.fake.last_name()}"
         first, *rest = full_name.lower().split()
         title = title or (
-            self.rng.choice(sorted(cat.DECISION_MAKER_TITLES)) if decision_maker
+            self.rng.choice(sorted(cat.DECISION_MAKER_TITLES))
+            if decision_maker
             else self.rng.choice([t for t in cat.CONTACT_TITLES if t not in cat.DECISION_MAKER_TITLES])
         )
         contact = {
@@ -236,10 +250,20 @@ class DemoDataGenerator:
         self.ds.contacts.append(contact)
         return contact
 
-    def _new_lead(self, customer: Row | None, *, status: LeadStatus, received: datetime,
-                  first_response: datetime | None, last_contact: datetime | None, value: Decimal | None,
-                  requirement: str, contact: Row | None = None, company_name: str | None = None,
-                  industry: str | None = None) -> Row:
+    def _new_lead(
+        self,
+        customer: Row | None,
+        *,
+        status: LeadStatus,
+        received: datetime,
+        first_response: datetime | None,
+        last_contact: datetime | None,
+        value: Decimal | None,
+        requirement: str,
+        contact: Row | None = None,
+        company_name: str | None = None,
+        industry: str | None = None,
+    ) -> Row:
         owner_id = customer["owner_id"] if customer else self.rng.choice(self.reps)["id"]
         lead = {
             **self._base(),
@@ -281,36 +305,75 @@ class DemoDataGenerator:
             lines.append((p["SVC-TRAIN"], self.rng.randint(1, 3), Decimal("0")))
         return lines
 
-    def _make_quote(self, opp: Row, customer: Row, *, lines: list[tuple[cat.Product, int, Decimal]],
-                    discount_pct: Decimal, status: QuoteStatus, sent_at: datetime | None,
-                    validity_days: int = 30, version: int = 1) -> Row:
+    def _make_quote(
+        self,
+        opp: Row,
+        customer: Row,
+        *,
+        lines: list[tuple[cat.Product, int, Decimal]],
+        discount_pct: Decimal,
+        status: QuoteStatus,
+        sent_at: datetime | None,
+        validity_days: int = 30,
+        version: int = 1,
+    ) -> Row:
         self._quote_seq += 1
         quote_id = self._id()
         subtotal = Decimal("0")
         for pos, (product, qty, line_disc) in enumerate(lines, start=1):
             line_total = _money(product.unit_price * qty * (1 - line_disc / 100))
             subtotal += line_total
-            self.ds.quote_items.append({
-                "id": self._id(), "quote_id": quote_id, "position": pos, "sku": product.sku,
-                "description": product.name, "quantity": Decimal(qty), "unit_price": product.unit_price,
-                "discount_pct": line_disc, "line_total": line_total,
-            })
+            self.ds.quote_items.append(
+                {
+                    "id": self._id(),
+                    "quote_id": quote_id,
+                    "position": pos,
+                    "sku": product.sku,
+                    "description": product.name,
+                    "quantity": Decimal(qty),
+                    "unit_price": product.unit_price,
+                    "discount_pct": line_disc,
+                    "line_total": line_total,
+                }
+            )
         total = _money(subtotal * (1 - discount_pct / 100))
         quote = {
-            "id": quote_id, "company_id": self.company_id, "opportunity_id": opp["id"],
-            "customer_id": customer["id"], "quote_number": f"Q-{self.now.year}-{self._quote_seq:04d}",
-            "version": version, "status": status, "subtotal": subtotal, "discount_pct": discount_pct,
-            "tax_pct": Decimal("18"), "total": total, "currency": "INR", "sent_at": sent_at,
-            "viewed_at": sent_at + timedelta(hours=self.rng.randint(2, 40)) if sent_at and status != QuoteStatus.SENT else None,
+            "id": quote_id,
+            "company_id": self.company_id,
+            "opportunity_id": opp["id"],
+            "customer_id": customer["id"],
+            "quote_number": f"Q-{self.now.year}-{self._quote_seq:04d}",
+            "version": version,
+            "status": status,
+            "subtotal": subtotal,
+            "discount_pct": discount_pct,
+            "tax_pct": Decimal("18"),
+            "total": total,
+            "currency": "INR",
+            "sent_at": sent_at,
+            "viewed_at": sent_at + timedelta(hours=self.rng.randint(2, 40))
+            if sent_at and status != QuoteStatus.SENT
+            else None,
             "valid_until": (sent_at + timedelta(days=validity_days)).date() if sent_at else None,
-            "responded_at": None, "is_synthetic": True,
+            "responded_at": None,
+            "is_synthetic": True,
         }
         self.ds.quotes.append(quote)
         return quote
 
-    def _conversation(self, *, customer: Row, contact: Row, opp: Row | None, rep: Row, archetype: str,
-                      end_at: datetime, fill: dict[str, str], channel: Channel | None = None,
-                      variant: int | None = None) -> Row:
+    def _conversation(
+        self,
+        *,
+        customer: Row,
+        contact: Row,
+        opp: Row | None,
+        rep: Row,
+        archetype: str,
+        end_at: datetime,
+        fill: dict[str, str],
+        channel: Channel | None = None,
+        variant: int | None = None,
+    ) -> Row:
         scripts = ARCHETYPES[archetype]
         script = scripts[variant if variant is not None else self.rng.randrange(len(scripts))]
         start = end_at - timedelta(days=script[-1][1])
@@ -320,50 +383,83 @@ class DemoDataGenerator:
         for sender, offset, text in script:
             sent_at = start + timedelta(days=offset)
             is_customer = sender == "customer"
-            self.ds.messages.append({
-                "id": self._id(), "conversation_id": conv_id,
-                "sender_type": SenderType.CUSTOMER if is_customer else SenderType.REP,
-                "sender_name": contact["full_name"] if is_customer else rep["full_name"],
-                "body": text.format(**fill), "sent_at": sent_at,
-            })
+            self.ds.messages.append(
+                {
+                    "id": self._id(),
+                    "conversation_id": conv_id,
+                    "sender_type": SenderType.CUSTOMER if is_customer else SenderType.REP,
+                    "sender_name": contact["full_name"] if is_customer else rep["full_name"],
+                    "body": text.format(**fill),
+                    "sent_at": sent_at,
+                }
+            )
             last_sender = SenderType.CUSTOMER if is_customer else SenderType.REP
             last_at = sent_at
         conv = {
-            "id": conv_id, "company_id": self.company_id, "customer_id": customer["id"],
-            "opportunity_id": opp["id"] if opp else None, "contact_id": contact["id"],
+            "id": conv_id,
+            "company_id": self.company_id,
+            "customer_id": customer["id"],
+            "opportunity_id": opp["id"] if opp else None,
+            "contact_id": contact["id"],
             "channel": channel or self.rng.choices((Channel.EMAIL, Channel.WHATSAPP, Channel.CHAT), (70, 25, 5))[0],
-            "subject": self.rng.choice(SUBJECTS[archetype]), "started_at": start, "last_message_at": last_at,
-            "last_sender": last_sender, "is_synthetic": True, "_archetype": archetype,
+            "subject": self.rng.choice(SUBJECTS[archetype]),
+            "started_at": start,
+            "last_message_at": last_at,
+            "last_sender": last_sender,
+            "is_synthetic": True,
+            "_archetype": archetype,
             "_rep_times": [start + timedelta(days=o) for s, o, _ in script if s == "rep"],
         }
         self.ds.conversations.append(conv)
         return conv
 
-    def _activity(self, customer: Row, opp: Row | None, user: Row | None, type_: ActivityType,
-                  description: str, at: datetime, **meta: Any) -> None:
-        self.ds.activities.append({
-            **self._base(), "customer_id": customer["id"], "opportunity_id": opp["id"] if opp else None,
-            "user_id": user["id"] if user else None, "type": type_, "description": description,
-            "occurred_at": at, "metadata_": meta,
-        })
+    def _activity(
+        self,
+        customer: Row,
+        opp: Row | None,
+        user: Row | None,
+        type_: ActivityType,
+        description: str,
+        at: datetime,
+        **meta: Any,
+    ) -> None:
+        self.ds.activities.append(
+            {
+                **self._base(),
+                "customer_id": customer["id"],
+                "opportunity_id": opp["id"] if opp else None,
+                "user_id": user["id"] if user else None,
+                "type": type_,
+                "description": description,
+                "occurred_at": at,
+                "metadata_": meta,
+            }
+        )
 
-    def _fill(self, customer: Row, contact: Row, rep: Row, amount: Decimal, quote_no: str, line: str,
-              sites: int) -> dict[str, str]:
+    def _fill(
+        self, customer: Row, contact: Row, rep: Row, amount: Decimal, quote_no: str, line: str, sites: int
+    ) -> dict[str, str]:
         competitor = self.rng.choice(cat.COMPETITORS)
         return {
-            "c": contact["full_name"].split()[0], "r": rep["full_name"].split()[0],
-            "company": customer["_short"], "line": line.lower(), "amount": format_inr(amount),
-            "quote_no": quote_no, "competitor": competitor,
+            "c": contact["full_name"].split()[0],
+            "r": rep["full_name"].split()[0],
+            "company": customer["_short"],
+            "line": line.lower(),
+            "amount": format_inr(amount),
+            "quote_no": quote_no,
+            "competitor": competitor,
             "comp_amount": format_inr(_money(amount * Decimal(self.rng.uniform(0.78, 0.9)) / 1000) * 1000),
             "target_amount": format_inr(_money(amount * Decimal(self.rng.uniform(0.82, 0.92)) / 1000) * 1000),
-            "sites": str(sites), "city": customer["city"],
+            "sites": str(sites),
+            "city": customer["city"],
         }
 
     # ------------------------------------------------------------------ scenarios
     def _build_vertex_scenario(self) -> None:
         """The primary demo flow (Day 1 lead … Day 9 silence). Today is day 10."""
-        customer = self._new_customer(status=CustomerStatus.PROSPECT, name=VERTEX_NAME,
-                                      industry="Manufacturing", city=("Pune", "Maharashtra"))
+        customer = self._new_customer(
+            status=CustomerStatus.PROSPECT, name=VERTEX_NAME, industry="Manufacturing", city=("Pune", "Maharashtra")
+        )
         customer["segment"] = CustomerSegment.MID_MARKET
         customer["employee_count"] = 850
         customer["website"] = "https://www.vertexindustrial.in"
@@ -379,57 +475,153 @@ class DemoDataGenerator:
 
         day = lambda n, h=6: self._ago(10 - n).replace(hour=h, minute=30, second=0, microsecond=0)  # noqa: E731
         p = cat.PRODUCT_BY_SKU
-        lines = [(p["PULSE-STD"], 1, Decimal("0")), (p["SVC-INSTALL"], 3, Decimal("0")),
-                 (p["ARC-GW-200"], 4, Decimal("0")), (p["ARC-EM-3P"], 5, Decimal("0"))]
-        lead = self._new_lead(customer, status=LeadStatus.CONVERTED, received=day(1, 5), first_response=day(1, 7),
-                              last_contact=day(3), value=Decimal("480000"), contact=nikhil,
-                              requirement="Energy and condition monitoring across 3 plants in Chakan and Ranjangaon")
+        lines = [
+            (p["PULSE-STD"], 1, Decimal("0")),
+            (p["SVC-INSTALL"], 3, Decimal("0")),
+            (p["ARC-GW-200"], 4, Decimal("0")),
+            (p["ARC-EM-3P"], 5, Decimal("0")),
+        ]
+        lead = self._new_lead(
+            customer,
+            status=LeadStatus.CONVERTED,
+            received=day(1, 5),
+            first_response=day(1, 7),
+            last_contact=day(3),
+            value=Decimal("480000"),
+            contact=nikhil,
+            requirement="Energy and condition monitoring across 3 plants in Chakan and Ranjangaon",
+        )
         opp = {
-            **self._base(), "customer_id": customer["id"], "lead_id": lead["id"], "owner_id": rep["id"],
-            "primary_contact_id": nikhil["id"], "name": "Vertex — Plant-wide energy monitoring (3 sites)",
-            "stage": OpportunityStage.NEGOTIATION, "amount": Decimal("480000"), "currency": "INR",
-            "product_line": "Plant-wide monitoring", "expected_close_date": (self.now + timedelta(days=12)).date(),
-            "last_activity_at": day(3), "stage_changed_at": day(5), "closed_at": None, "loss_reason": None,
-            "competitor": None, "is_synthetic": True,
+            **self._base(),
+            "customer_id": customer["id"],
+            "lead_id": lead["id"],
+            "owner_id": rep["id"],
+            "primary_contact_id": nikhil["id"],
+            "name": "Vertex — Plant-wide energy monitoring (3 sites)",
+            "stage": OpportunityStage.NEGOTIATION,
+            "amount": Decimal("480000"),
+            "currency": "INR",
+            "product_line": "Plant-wide monitoring",
+            "expected_close_date": (self.now + timedelta(days=12)).date(),
+            "last_activity_at": day(3),
+            "stage_changed_at": day(5),
+            "closed_at": None,
+            "loss_reason": None,
+            "competitor": None,
+            "is_synthetic": True,
         }
         self.ds.opportunities.append(opp)
-        quote = self._make_quote(opp, customer, lines=lines, discount_pct=Decimal("0"),
-                                 status=QuoteStatus.VIEWED, sent_at=day(3), validity_days=21)
+        quote = self._make_quote(
+            opp,
+            customer,
+            lines=lines,
+            discount_pct=Decimal("0"),
+            status=QuoteStatus.VIEWED,
+            sent_at=day(3),
+            validity_days=21,
+        )
         assert quote["total"] == Decimal("480000"), quote["total"]
         conv_id = self._id()
         transcript = [
-            ("rep", day(2, 8), "Hi Nikhil, thanks for your time on the call today. As discussed, we'll cover energy metering and gateway connectivity for all three plants, with Pulse dashboards for your maintenance team. I'll send the quotation tomorrow."),
-            ("customer", day(2, 10), "Thanks Priya. Please include installation for all three sites. We want this live before the next quarter's energy audit."),
-            ("rep", day(3, 6), f"Hi Nikhil, please find attached quotation {quote['quote_number']} for ₹4,80,000 covering 3 sites (gateways, energy meters, installation and the Pulse platform). The quote is valid for 21 days."),
-            ("customer", day(5, 9), "Hi Priya, we went through the quote with our finance team. The solution fits well, but can you do better on the price? Our approved budget is around ₹4,30,000. We are keen to close this quickly."),
-            ("customer", day(6, 7), "Also, to be transparent — Voltrix Systems has quoted ₹4,10,000 for a similar scope. We actually prefer your dashboard and the alerting, but I need to justify the difference to management. We'd like to finalise by the end of this month."),
+            (
+                "rep",
+                day(2, 8),
+                "Hi Nikhil, thanks for your time on the call today. As discussed, we'll cover energy metering and gateway connectivity for all three plants, with Pulse dashboards for your maintenance team. I'll send the quotation tomorrow.",
+            ),
+            (
+                "customer",
+                day(2, 10),
+                "Thanks Priya. Please include installation for all three sites. We want this live before the next quarter's energy audit.",
+            ),
+            (
+                "rep",
+                day(3, 6),
+                f"Hi Nikhil, please find attached quotation {quote['quote_number']} for ₹4,80,000 covering 3 sites (gateways, energy meters, installation and the Pulse platform). The quote is valid for 21 days.",
+            ),
+            (
+                "customer",
+                day(5, 9),
+                "Hi Priya, we went through the quote with our finance team. The solution fits well, but can you do better on the price? Our approved budget is around ₹4,30,000. We are keen to close this quickly.",
+            ),
+            (
+                "customer",
+                day(6, 7),
+                "Also, to be transparent — Voltrix Systems has quoted ₹4,10,000 for a similar scope. We actually prefer your dashboard and the alerting, but I need to justify the difference to management. We'd like to finalise by the end of this month.",
+            ),
         ]
         for sender, at, text in transcript:
-            self.ds.messages.append({
-                "id": self._id(), "conversation_id": conv_id,
-                "sender_type": SenderType.CUSTOMER if sender == "customer" else SenderType.REP,
-                "sender_name": nikhil["full_name"] if sender == "customer" else rep["full_name"],
-                "body": text, "sent_at": at,
-            })
-        self.ds.conversations.append({
-            "id": conv_id, "company_id": self.company_id, "customer_id": customer["id"], "opportunity_id": opp["id"],
-            "contact_id": nikhil["id"], "channel": Channel.EMAIL, "subject": "Quotation for plant-wide energy monitoring",
-            "started_at": day(2, 8), "last_message_at": day(6, 7), "last_sender": SenderType.CUSTOMER,
-            "is_synthetic": True, "_archetype": "vertex", "_rep_times": [day(2, 8), day(3, 6)],
-        })
-        self._activity(customer, opp, rep, ActivityType.NOTE, "Inbound lead from website: monitoring for 3 plants", day(1, 5))
-        self._activity(customer, opp, rep, ActivityType.CALL, "Discovery call with Nikhil Deshpande (Plant Head) — 3 sites, wants go-live before energy audit", day(2, 7), duration_min=35)
-        self._activity(customer, opp, rep, ActivityType.QUOTE_SENT, f"Quotation {quote['quote_number']} sent (₹4,80,000)", day(3, 6), quote_id=str(quote["id"]))
-        self._activity(customer, opp, None, ActivityType.STAGE_CHANGE, "Stage changed Proposal → Negotiation", day(5, 10))
-        self.ds.followups.append({
-            **self._base(), "customer_id": customer["id"], "opportunity_id": opp["id"], "assigned_to": rep["id"],
-            "title": "Respond to Vertex pricing question", "notes": "Customer asked for better pricing on 3-site quote",
-            "due_at": day(6, 12), "status": FollowupStatus.PENDING, "completed_at": None,
-            "created_by_agent": False, "recommendation_id": None,
-        })
+            self.ds.messages.append(
+                {
+                    "id": self._id(),
+                    "conversation_id": conv_id,
+                    "sender_type": SenderType.CUSTOMER if sender == "customer" else SenderType.REP,
+                    "sender_name": nikhil["full_name"] if sender == "customer" else rep["full_name"],
+                    "body": text,
+                    "sent_at": at,
+                }
+            )
+        self.ds.conversations.append(
+            {
+                "id": conv_id,
+                "company_id": self.company_id,
+                "customer_id": customer["id"],
+                "opportunity_id": opp["id"],
+                "contact_id": nikhil["id"],
+                "channel": Channel.EMAIL,
+                "subject": "Quotation for plant-wide energy monitoring",
+                "started_at": day(2, 8),
+                "last_message_at": day(6, 7),
+                "last_sender": SenderType.CUSTOMER,
+                "is_synthetic": True,
+                "_archetype": "vertex",
+                "_rep_times": [day(2, 8), day(3, 6)],
+            }
+        )
+        self._activity(
+            customer, opp, rep, ActivityType.NOTE, "Inbound lead from website: monitoring for 3 plants", day(1, 5)
+        )
+        self._activity(
+            customer,
+            opp,
+            rep,
+            ActivityType.CALL,
+            "Discovery call with Nikhil Deshpande (Plant Head) — 3 sites, wants go-live before energy audit",
+            day(2, 7),
+            duration_min=35,
+        )
+        self._activity(
+            customer,
+            opp,
+            rep,
+            ActivityType.QUOTE_SENT,
+            f"Quotation {quote['quote_number']} sent (₹4,80,000)",
+            day(3, 6),
+            quote_id=str(quote["id"]),
+        )
+        self._activity(
+            customer, opp, None, ActivityType.STAGE_CHANGE, "Stage changed Proposal → Negotiation", day(5, 10)
+        )
+        self.ds.followups.append(
+            {
+                **self._base(),
+                "customer_id": customer["id"],
+                "opportunity_id": opp["id"],
+                "assigned_to": rep["id"],
+                "title": "Respond to Vertex pricing question",
+                "notes": "Customer asked for better pricing on 3-site quote",
+                "due_at": day(6, 12),
+                "status": FollowupStatus.PENDING,
+                "completed_at": None,
+                "created_by_agent": False,
+                "recommendation_id": None,
+            }
+        )
         self.ds.ground_truth["vertex"] = {
-            "customer_id": str(customer["id"]), "opportunity_id": str(opp["id"]), "quote_id": str(quote["id"]),
-            "conversation_id": str(conv_id), "expected_risk_level": "critical",
+            "customer_id": str(customer["id"]),
+            "opportunity_id": str(opp["id"]),
+            "quote_id": str(quote["id"]),
+            "conversation_id": str(conv_id),
+            "expected_risk_level": "critical",
         }
 
     def _build_open_pipeline(self) -> None:
@@ -454,12 +646,23 @@ class DemoDataGenerator:
         conv_start = end_at - timedelta(days=script_len)
         received = conv_start - timedelta(days=self.rng.uniform(5, 40))
         opp = {
-            **self._base(), "customer_id": customer["id"], "lead_id": None, "owner_id": rep["id"],
-            "primary_contact_id": contact["id"], "name": f"{customer['_short']} — {line}",
-            "stage": stage, "amount": Decimal("0"), "currency": "INR", "product_line": line,
+            **self._base(),
+            "customer_id": customer["id"],
+            "lead_id": None,
+            "owner_id": rep["id"],
+            "primary_contact_id": contact["id"],
+            "name": f"{customer['_short']} — {line}",
+            "stage": stage,
+            "amount": Decimal("0"),
+            "currency": "INR",
+            "product_line": line,
             "expected_close_date": (self.now + timedelta(days=self.rng.randint(-10, 75))).date(),
-            "last_activity_at": None, "stage_changed_at": conv_start, "closed_at": None, "loss_reason": None,
-            "competitor": None, "is_synthetic": True,
+            "last_activity_at": None,
+            "stage_changed_at": conv_start,
+            "closed_at": None,
+            "loss_reason": None,
+            "competitor": None,
+            "is_synthetic": True,
         }
         quote = None
         discount = self.rng.choices((Decimal("0"), Decimal("5"), Decimal("8"), Decimal("10")), (55, 20, 15, 10))[0]
@@ -467,53 +670,121 @@ class DemoDataGenerator:
             status = QuoteStatus.VIEWED if self.rng.random() < 0.6 else QuoteStatus.SENT
             # Some quotes were sent long enough ago to be expiring / expired.
             validity = self.rng.choice((30, 30, 21, 15))
-            sent_at = conv_start if archetype in QUOTE_ARCHETYPES else conv_start - timedelta(days=self.rng.uniform(2, 10))
-            quote = self._make_quote(opp, customer, lines=lines, discount_pct=discount, status=status,
-                                     sent_at=sent_at, validity_days=validity)
+            sent_at = (
+                conv_start if archetype in QUOTE_ARCHETYPES else conv_start - timedelta(days=self.rng.uniform(2, 10))
+            )
+            quote = self._make_quote(
+                opp,
+                customer,
+                lines=lines,
+                discount_pct=discount,
+                status=status,
+                sent_at=sent_at,
+                validity_days=validity,
+            )
             if quote["valid_until"] and quote["valid_until"] < self.now.date():
                 quote["status"] = QuoteStatus.EXPIRED
             opp["amount"] = quote["total"]
         else:
             opp["amount"] = _money(sum(p.unit_price * q for p, q, _ in lines) * (1 - discount / 100))
         self.ds.opportunities.append(opp)
-        fill = self._fill(customer, contact, rep, opp["amount"], quote["quote_number"] if quote else "(draft)", line, sites)
-        conv = self._conversation(customer=customer, contact=contact, opp=opp, rep=rep, archetype=archetype,
-                                  end_at=end_at, fill=fill)
+        fill = self._fill(
+            customer, contact, rep, opp["amount"], quote["quote_number"] if quote else "(draft)", line, sites
+        )
+        conv = self._conversation(
+            customer=customer, contact=contact, opp=opp, rep=rep, archetype=archetype, end_at=end_at, fill=fill
+        )
         if archetype == "competitor":
             opp["competitor"] = fill["competitor"] if self.rng.random() < 0.5 else None
         rep_times = conv["_rep_times"] or [received + timedelta(hours=self.rng.randint(2, 30))]
         opp["last_activity_at"] = max(rep_times)
-        lead = self._new_lead(customer, status=LeadStatus.CONVERTED if stage != OpportunityStage.PROSPECTING else LeadStatus.QUALIFIED,
-                              received=received, first_response=received + timedelta(hours=self.rng.uniform(1, 30)),
-                              last_contact=max(rep_times), value=opp["amount"], contact=contact,
-                              requirement=f"{line} for {sites} site(s)")
+        lead = self._new_lead(
+            customer,
+            status=LeadStatus.CONVERTED if stage != OpportunityStage.PROSPECTING else LeadStatus.QUALIFIED,
+            received=received,
+            first_response=received + timedelta(hours=self.rng.uniform(1, 30)),
+            last_contact=max(rep_times),
+            value=opp["amount"],
+            contact=contact,
+            requirement=f"{line} for {sites} site(s)",
+        )
         opp["lead_id"] = lead["id"]
-        self._activity(customer, opp, rep, ActivityType.CALL, f"Discovery call with {contact['full_name']}", received + timedelta(days=1))
+        self._activity(
+            customer,
+            opp,
+            rep,
+            ActivityType.CALL,
+            f"Discovery call with {contact['full_name']}",
+            received + timedelta(days=1),
+        )
         if quote and quote["sent_at"]:
-            self._activity(customer, opp, rep, ActivityType.QUOTE_SENT, f"Quotation {quote['quote_number']} sent ({format_inr(quote['total'])})", quote["sent_at"], quote_id=str(quote["id"]))
+            self._activity(
+                customer,
+                opp,
+                rep,
+                ActivityType.QUOTE_SENT,
+                f"Quotation {quote['quote_number']} sent ({format_inr(quote['total'])})",
+                quote["sent_at"],
+                quote_id=str(quote["id"]),
+            )
         for t in rep_times:
             self._activity(customer, opp, rep, ActivityType.EMAIL, f"Email to {contact['full_name']}", t)
         # Follow-ups: stale archetypes tend to have overdue ones.
-        overdue_bias = {"ghosting": 0.7, "quote_question": 0.75, "price_objection": 0.6, "competitor": 0.6,
-                        "unanswered": 0.7, "timing_delay": 0.5}.get(archetype, 0.15)
+        overdue_bias = {
+            "ghosting": 0.7,
+            "quote_question": 0.75,
+            "price_objection": 0.6,
+            "competitor": 0.6,
+            "unanswered": 0.7,
+            "timing_delay": 0.5,
+        }.get(archetype, 0.15)
         if self.rng.random() < 0.8:
             overdue = self.rng.random() < overdue_bias
-            due = self._ago(self.rng.uniform(1, max(stale, 1.5))) if overdue else self.now + timedelta(days=self.rng.uniform(0.5, 6))
-            self.ds.followups.append({
-                **self._base(), "customer_id": customer["id"], "opportunity_id": opp["id"], "assigned_to": rep["id"],
-                "title": self.rng.choice(("Follow up on quotation", "Call to discuss proposal", "Share revised proposal",
-                                          "Check decision timeline", "Send case study")),
-                "notes": None, "due_at": due, "status": FollowupStatus.PENDING, "completed_at": None,
-                "created_by_agent": False, "recommendation_id": None,
-            })
+            due = (
+                self._ago(self.rng.uniform(1, max(stale, 1.5)))
+                if overdue
+                else self.now + timedelta(days=self.rng.uniform(0.5, 6))
+            )
+            self.ds.followups.append(
+                {
+                    **self._base(),
+                    "customer_id": customer["id"],
+                    "opportunity_id": opp["id"],
+                    "assigned_to": rep["id"],
+                    "title": self.rng.choice(
+                        (
+                            "Follow up on quotation",
+                            "Call to discuss proposal",
+                            "Share revised proposal",
+                            "Check decision timeline",
+                            "Send case study",
+                        )
+                    ),
+                    "notes": None,
+                    "due_at": due,
+                    "status": FollowupStatus.PENDING,
+                    "completed_at": None,
+                    "created_by_agent": False,
+                    "recommendation_id": None,
+                }
+            )
         if self.rng.random() < 0.5:
             done_at = conv["started_at"] - timedelta(days=self.rng.uniform(0.5, 4))
-            self.ds.followups.append({
-                **self._base(), "customer_id": customer["id"], "opportunity_id": opp["id"], "assigned_to": rep["id"],
-                "title": "Initial discovery follow-up", "notes": None, "due_at": done_at,
-                "status": FollowupStatus.COMPLETED, "completed_at": done_at, "created_by_agent": False,
-                "recommendation_id": None,
-            })
+            self.ds.followups.append(
+                {
+                    **self._base(),
+                    "customer_id": customer["id"],
+                    "opportunity_id": opp["id"],
+                    "assigned_to": rep["id"],
+                    "title": "Initial discovery follow-up",
+                    "notes": None,
+                    "due_at": done_at,
+                    "status": FollowupStatus.COMPLETED,
+                    "completed_at": done_at,
+                    "created_by_agent": False,
+                    "recommendation_id": None,
+                }
+            )
 
     def _build_closed_history(self) -> None:
         for won in [True] * 60 + [False] * 50:
@@ -527,20 +798,37 @@ class DemoDataGenerator:
             sent_at = closed_at - timedelta(days=self.rng.uniform(5, 40))
             received = sent_at - timedelta(days=self.rng.uniform(10, 45))
             opp = {
-                **self._base(), "customer_id": customer["id"], "lead_id": None, "owner_id": rep["id"],
-                "primary_contact_id": contact["id"], "name": f"{customer['_short']} — {line}",
+                **self._base(),
+                "customer_id": customer["id"],
+                "lead_id": None,
+                "owner_id": rep["id"],
+                "primary_contact_id": contact["id"],
+                "name": f"{customer['_short']} — {line}",
                 "stage": OpportunityStage.CLOSED_WON if won else OpportunityStage.CLOSED_LOST,
-                "amount": Decimal("0"), "currency": "INR", "product_line": line,
-                "expected_close_date": closed_at.date(), "last_activity_at": closed_at, "stage_changed_at": closed_at,
-                "closed_at": closed_at, "loss_reason": None if won else self.rng.choice(cat.LOSS_REASONS),
-                "competitor": None, "is_synthetic": True,
+                "amount": Decimal("0"),
+                "currency": "INR",
+                "product_line": line,
+                "expected_close_date": closed_at.date(),
+                "last_activity_at": closed_at,
+                "stage_changed_at": closed_at,
+                "closed_at": closed_at,
+                "loss_reason": None if won else self.rng.choice(cat.LOSS_REASONS),
+                "competitor": None,
+                "is_synthetic": True,
             }
             discount = self.rng.choices((Decimal("0"), Decimal("5"), Decimal("10"), Decimal("12")), (40, 30, 22, 8))[0]
             has_quote = True  # lost deals in this dataset all reached the quotation stage
             if has_quote:
-                quote = self._make_quote(opp, customer, lines=lines, discount_pct=discount,
-                                         status=QuoteStatus.ACCEPTED if won else self.rng.choice((QuoteStatus.REJECTED, QuoteStatus.EXPIRED)),
-                                         sent_at=sent_at)
+                quote = self._make_quote(
+                    opp,
+                    customer,
+                    lines=lines,
+                    discount_pct=discount,
+                    status=QuoteStatus.ACCEPTED
+                    if won
+                    else self.rng.choice((QuoteStatus.REJECTED, QuoteStatus.EXPIRED)),
+                    sent_at=sent_at,
+                )
                 quote["responded_at"] = closed_at if won else None
                 opp["amount"] = quote["total"]
             else:
@@ -548,19 +836,38 @@ class DemoDataGenerator:
             if not won and opp["loss_reason"] == "Chose competitor on price":
                 opp["competitor"] = self.rng.choice(cat.COMPETITORS)
             self.ds.opportunities.append(opp)
-            lead = self._new_lead(customer, status=LeadStatus.CONVERTED if won else LeadStatus.LOST, received=received,
-                                  first_response=received + timedelta(hours=self.rng.uniform(1, 48)),
-                                  last_contact=closed_at, value=opp["amount"], contact=contact,
-                                  requirement=f"{line} for {sites} site(s)")
+            lead = self._new_lead(
+                customer,
+                status=LeadStatus.CONVERTED if won else LeadStatus.LOST,
+                received=received,
+                first_response=received + timedelta(hours=self.rng.uniform(1, 48)),
+                last_contact=closed_at,
+                value=opp["amount"],
+                contact=contact,
+                requirement=f"{line} for {sites} site(s)",
+            )
             opp["lead_id"] = lead["id"]
             fill = self._fill(customer, contact, rep, opp["amount"], "(final)", line, sites)
             if opp["competitor"]:
                 fill["competitor"] = opp["competitor"]
-            self._conversation(customer=customer, contact=contact, opp=opp, rep=rep,
-                               archetype="won" if won else "lost", end_at=closed_at, fill=fill,
-                               variant=None if won else (0 if opp["competitor"] else 1))
-            self._activity(customer, opp, rep, ActivityType.STAGE_CHANGE,
-                           f"Deal {'won' if won else 'lost'}" + ("" if won else f": {opp['loss_reason']}"), closed_at)
+            self._conversation(
+                customer=customer,
+                contact=contact,
+                opp=opp,
+                rep=rep,
+                archetype="won" if won else "lost",
+                end_at=closed_at,
+                fill=fill,
+                variant=None if won else (0 if opp["competitor"] else 1),
+            )
+            self._activity(
+                customer,
+                opp,
+                rep,
+                ActivityType.STAGE_CHANGE,
+                f"Deal {'won' if won else 'lost'}" + ("" if won else f": {opp['loss_reason']}"),
+                closed_at,
+            )
             if won:
                 customer["lifetime_value"] = opp["amount"]
                 if self.rng.random() < 0.3:
@@ -571,8 +878,13 @@ class DemoDataGenerator:
 
     def _build_extra_leads_and_prospects(self) -> None:
         """Leads that have not (yet) become opportunities, including unanswered inbound leads."""
-        plan = ((LeadStatus.NEW, 55), (LeadStatus.CONTACTED, 70), (LeadStatus.UNQUALIFIED, 55), (LeadStatus.LOST, 40),
-                (LeadStatus.QUALIFIED, 30))
+        plan = (
+            (LeadStatus.NEW, 55),
+            (LeadStatus.CONTACTED, 70),
+            (LeadStatus.UNQUALIFIED, 55),
+            (LeadStatus.LOST, 40),
+            (LeadStatus.QUALIFIED, 30),
+        )
         for status, count in plan:
             for _ in range(count):
                 received = self._business_hour(self._ago(self.rng.uniform(0.3, 60 if status != LeadStatus.NEW else 6)))
@@ -580,7 +892,9 @@ class DemoDataGenerator:
                 line = self.rng.choice(cat.PRODUCT_LINES)
                 value = _money(self.rng.uniform(80, 1800) * 1000) if self.rng.random() < 0.7 else None
                 needs_customer = status in (LeadStatus.CONTACTED, LeadStatus.QUALIFIED) and self.rng.random() < 0.75
-                customer = self._new_customer(status=CustomerStatus.PROSPECT, industry=industry) if needs_customer else None
+                customer = (
+                    self._new_customer(status=CustomerStatus.PROSPECT, industry=industry) if needs_customer else None
+                )
                 contact = customer["_contacts"][0] if customer else None
                 responded = status != LeadStatus.NEW or self.rng.random() < 0.35
                 first_response = received + timedelta(hours=self.rng.uniform(1, 72)) if responded else None
@@ -590,15 +904,31 @@ class DemoDataGenerator:
                 if customer is None:
                     stem = self.rng.choice(cat.NAME_STEMS)
                     name = f"{stem} {self.rng.choice(cat.INDUSTRIES[industry])}"
-                lead = self._new_lead(customer, status=status, received=received, first_response=first_response,
-                                      last_contact=first_response, value=value, contact=contact, company_name=name,
-                                      industry=industry, requirement=f"Enquiry: {line.lower()}")
+                lead = self._new_lead(
+                    customer,
+                    status=status,
+                    received=received,
+                    first_response=first_response,
+                    last_contact=first_response,
+                    value=value,
+                    contact=contact,
+                    company_name=name,
+                    industry=industry,
+                    requirement=f"Enquiry: {line.lower()}",
+                )
                 if customer and contact and self.rng.random() < 0.4:
                     rep = next(r for r in self.reps if r["id"] == customer["owner_id"])
                     fill = self._fill(customer, contact, rep, value or Decimal("250000"), "(draft)", line, 2)
                     end = min(received + timedelta(days=self.rng.uniform(1, 5)), self.now - timedelta(hours=3))
-                    self._conversation(customer=customer, contact=contact, opp=None, rep=rep,
-                                       archetype=self.rng.choice(("unanswered", "engaged")), end_at=end, fill=fill)
+                    self._conversation(
+                        customer=customer,
+                        contact=contact,
+                        opp=None,
+                        rep=rep,
+                        archetype=self.rng.choice(("unanswered", "engaged")),
+                        end_at=end,
+                        fill=fill,
+                    )
                     lead["last_contact_at"] = end
 
     def _build_account_management(self) -> None:
@@ -608,8 +938,15 @@ class DemoDataGenerator:
             contact = customer["_contacts"][0]
             fill = self._fill(customer, contact, rep, Decimal("60000"), "(renewal)", "AMC renewal", 1)
             end = self._business_hour(self._ago(self.rng.uniform(1, 40)))
-            self._conversation(customer=customer, contact=contact, opp=None, rep=rep,
-                               archetype="account_management", end_at=end, fill=fill)
+            self._conversation(
+                customer=customer,
+                contact=contact,
+                opp=None,
+                rep=rep,
+                archetype="account_management",
+                end_at=end,
+                fill=fill,
+            )
 
 
 def strip_private(row: Row) -> Row:

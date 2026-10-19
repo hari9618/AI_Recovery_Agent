@@ -62,9 +62,7 @@ class ConversationAnalysis(UUIDPk, Base):
 
     __tablename__ = "conversation_analyses"
     __table_args__ = (
-        sa.UniqueConstraint(
-            "conversation_id", "content_hash", "prompt_version", name="uq_conversation_analyses_hash"
-        ),
+        sa.UniqueConstraint("conversation_id", "content_hash", "prompt_version", name="uq_conversation_analyses_hash"),
     )
 
     company_id: Mapped[uuid.UUID] = company_fk()

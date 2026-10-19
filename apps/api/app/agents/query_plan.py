@@ -23,27 +23,63 @@ class PlannedQuery:
 
 
 _BY_SIGNAL: dict[str, PlannedQuery] = {
-    "PRICE_OBJECTION": PlannedQuery("discount approval limits and conditions when a customer says the price is too high",
-                                    (D.DISCOUNT_POLICY, D.OBJECTION_HANDLING), "price objection"),
-    "COMPETITOR_MENTIONED": PlannedQuery("customer shares a lower competing quotation from a competitor",
-                                         (D.OBJECTION_HANDLING, D.DISCOUNT_POLICY), "competitor mentioned"),
-    "CUSTOMER_AWAITING_REPLY": PlannedQuery("response time standard for customer questions and follow-up cadence after a quotation",
-                                            (D.SALES_PLAYBOOK,), "customer waiting for reply"),
-    "QUOTE_UNANSWERED": PlannedQuery("follow-up cadence after a quotation is sent", (D.SALES_PLAYBOOK,), "quote unanswered"),
-    "NO_RECENT_CONTACT": PlannedQuery("deals at risk escalation when no contact for several days", (D.SALES_PLAYBOOK,), "no recent contact"),
-    "QUOTE_EXPIRING": PlannedQuery("quotation validity and re-issuing expiring quotations", (D.PRICING_POLICY, D.SOP), "quote expiring"),
-    "QUOTE_EXPIRED": PlannedQuery("expired quotation must be re-issued as a new version", (D.PRICING_POLICY, D.SOP), "quote expired"),
-    "HIGH_VALUE": PlannedQuery("high-value deals customer-facing commercial communication review by sales manager",
-                               (D.SOP, D.SALES_PLAYBOOK), "high-value deal"),
-    "TIMING": PlannedQuery("timing or budget objection phased rollout pilot", (D.OBJECTION_HANDLING,), "timing objection"),
+    "PRICE_OBJECTION": PlannedQuery(
+        "discount approval limits and conditions when a customer says the price is too high",
+        (D.DISCOUNT_POLICY, D.OBJECTION_HANDLING),
+        "price objection",
+    ),
+    "COMPETITOR_MENTIONED": PlannedQuery(
+        "customer shares a lower competing quotation from a competitor",
+        (D.OBJECTION_HANDLING, D.DISCOUNT_POLICY),
+        "competitor mentioned",
+    ),
+    "CUSTOMER_AWAITING_REPLY": PlannedQuery(
+        "response time standard for customer questions and follow-up cadence after a quotation",
+        (D.SALES_PLAYBOOK,),
+        "customer waiting for reply",
+    ),
+    "QUOTE_UNANSWERED": PlannedQuery(
+        "follow-up cadence after a quotation is sent", (D.SALES_PLAYBOOK,), "quote unanswered"
+    ),
+    "NO_RECENT_CONTACT": PlannedQuery(
+        "deals at risk escalation when no contact for several days", (D.SALES_PLAYBOOK,), "no recent contact"
+    ),
+    "QUOTE_EXPIRING": PlannedQuery(
+        "quotation validity and re-issuing expiring quotations", (D.PRICING_POLICY, D.SOP), "quote expiring"
+    ),
+    "QUOTE_EXPIRED": PlannedQuery(
+        "expired quotation must be re-issued as a new version", (D.PRICING_POLICY, D.SOP), "quote expired"
+    ),
+    "HIGH_VALUE": PlannedQuery(
+        "high-value deals customer-facing commercial communication review by sales manager",
+        (D.SOP, D.SALES_PLAYBOOK),
+        "high-value deal",
+    ),
+    "TIMING": PlannedQuery(
+        "timing or budget objection phased rollout pilot", (D.OBJECTION_HANDLING,), "timing objection"
+    ),
 }
-_ALWAYS = PlannedQuery("follow-up email structure and what must never be written to customers",
-                       (D.COMMUNICATION_GUIDELINES,), "communication rules for any customer message")
-PRIORITY = ("PRICE_OBJECTION", "COMPETITOR_MENTIONED", "HIGH_VALUE", "QUOTE_EXPIRED", "QUOTE_EXPIRING",
-            "CUSTOMER_AWAITING_REPLY", "TIMING", "QUOTE_UNANSWERED", "NO_RECENT_CONTACT")
+_ALWAYS = PlannedQuery(
+    "follow-up email structure and what must never be written to customers",
+    (D.COMMUNICATION_GUIDELINES,),
+    "communication rules for any customer message",
+)
+PRIORITY = (
+    "PRICE_OBJECTION",
+    "COMPETITOR_MENTIONED",
+    "HIGH_VALUE",
+    "QUOTE_EXPIRED",
+    "QUOTE_EXPIRING",
+    "CUSTOMER_AWAITING_REPLY",
+    "TIMING",
+    "QUOTE_UNANSWERED",
+    "NO_RECENT_CONTACT",
+)
 
 
-def plan_queries(reason_codes: list[str], objection_types: list[str], *, high_value: bool, max_queries: int = 4) -> list[PlannedQuery]:
+def plan_queries(
+    reason_codes: list[str], objection_types: list[str], *, high_value: bool, max_queries: int = 4
+) -> list[PlannedQuery]:
     signals = set(reason_codes)
     if "price" in objection_types:
         signals.add("PRICE_OBJECTION")

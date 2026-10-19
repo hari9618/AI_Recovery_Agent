@@ -75,10 +75,15 @@ class AnalysisOutcome:
 
     def as_dict(self) -> dict[str, Any]:
         return {
-            "conversation_id": str(self.conversation_id), "status": self.status.value, "cached": self.cached,
-            "model": self.model, "insight": self.insight.model_dump() if self.insight else None,
-            "dropped_quotes": self.dropped_quotes, "injection_flags": self.injection_flags,
-            "needs_review": self.needs_review, "errors": self.errors,
+            "conversation_id": str(self.conversation_id),
+            "status": self.status.value,
+            "cached": self.cached,
+            "model": self.model,
+            "insight": self.insight.model_dump() if self.insight else None,
+            "dropped_quotes": self.dropped_quotes,
+            "injection_flags": self.injection_flags,
+            "needs_review": self.needs_review,
+            "errors": self.errors,
         }
 
 
@@ -96,9 +101,14 @@ async def load_conversation(session: AsyncSession, company_id: uuid.UUID, conver
 def _outcome_from_row(row: m.ConversationAnalysis, conversation_id: uuid.UUID) -> AnalysisOutcome:
     insight = ConversationInsight.from_stored(row.analysis) if row.analysis else None
     return AnalysisOutcome(
-        conversation_id=conversation_id, status=row.status, cached=True, insight=insight, model=row.model,
+        conversation_id=conversation_id,
+        status=row.status,
+        cached=True,
+        insight=insight,
+        model=row.model,
         dropped_quotes=row.analysis.get("_dropped_quotes", []) if row.analysis else [],
-        needs_review=bool(insight and insight.confidence < LOW_CONFIDENCE), analysis_id=row.id,
+        needs_review=bool(insight and insight.confidence < LOW_CONFIDENCE),
+        analysis_id=row.id,
     )
 
 
@@ -113,8 +123,14 @@ async def analyze_conversation(
 ) -> AnalysisOutcome:
     conv = await load_conversation(session, company_id, conversation_id)
     if not conv.messages:
-        return AnalysisOutcome(conversation_id, LLMCallStatus.FALLBACK, False, None, provider.model,
-                               errors=["conversation has no messages"])
+        return AnalysisOutcome(
+            conversation_id,
+            LLMCallStatus.FALLBACK,
+            False,
+            None,
+            provider.model,
+            errors=["conversation has no messages"],
+        )
     digest = transcript_hash(conv.messages)
     if not force:
         cached = await session.scalar(
@@ -135,14 +151,20 @@ async def analyze_conversation(
     injection = [f.as_dict() for f in scan_for_injection(transcript)]
 
     tracer = get_tracer()
-    with tracer.observation(
-        "conversation_analysis", as_type="chain",
-        input={"conversation_id": str(conv.id), "messages": len(conv.messages), "content_hash": digest[:12]},
-        metadata={"prompt_version": PROMPT_VERSION},
-    ) as span, llm_call_context(company_id=company_id, trace_id=span.trace_id):
+    with (
+        tracer.observation(
+            "conversation_analysis",
+            as_type="chain",
+            input={"conversation_id": str(conv.id), "messages": len(conv.messages), "content_hash": digest[:12]},
+            metadata={"prompt_version": PROMPT_VERSION},
+        ) as span,
+        llm_call_context(company_id=company_id, trace_id=span.trace_id),
+    ):
         result = await generate_structured(
             provider,
-            build_messages(transcript, customer_name=customer.name if customer else "unknown", deal_context=deal_context),
+            build_messages(
+                transcript, customer_name=customer.name if customer else "unknown", deal_context=deal_context
+            ),
             ConversationInsight,
             purpose="conversation_analysis",
         )
@@ -151,8 +173,12 @@ async def analyze_conversation(
         if insight is not None:
             insight, dropped = verify_quotes(insight, customer_text)
         span.update(
-            output={"status": result.status.value, "intent": insight.intent if insight else None,
-                    "dropped_quotes": len(dropped), "injection_flags": len(injection)},
+            output={
+                "status": result.status.value,
+                "intent": insight.intent if insight else None,
+                "dropped_quotes": len(dropped),
+                "injection_flags": len(injection),
+            },
             level="WARNING" if (dropped or injection or result.status == LLMCallStatus.FALLBACK) else None,
         )
         trace_id = span.trace_id
@@ -161,10 +187,18 @@ async def analyze_conversation(
     if insight is not None:
         payload["_dropped_quotes"] = dropped
     row = m.ConversationAnalysis(
-        company_id=company_id, conversation_id=conv.id, content_hash=digest, prompt_version=PROMPT_VERSION,
-        model=result.model, status=result.status, intent=insight.intent if insight else None,
-        sentiment=insight.sentiment if insight else None, confidence=insight.confidence if insight else None,
-        analysis=payload, trace_id=trace_id, created_at=datetime.now(UTC),
+        company_id=company_id,
+        conversation_id=conv.id,
+        content_hash=digest,
+        prompt_version=PROMPT_VERSION,
+        model=result.model,
+        status=result.status,
+        intent=insight.intent if insight else None,
+        sentiment=insight.sentiment if insight else None,
+        confidence=insight.confidence if insight else None,
+        analysis=payload,
+        trace_id=trace_id,
+        created_at=datetime.now(UTC),
     )
     # Replace a previous row for the same hash/version (force re-analysis).
     existing = await session.scalar(
@@ -179,18 +213,37 @@ async def analyze_conversation(
         await session.flush()
     session.add(row)
     record_audit(
-        session, company_id=company_id, action="conversation.analyzed", actor_type=ActorType.AGENT,
-        actor_id=actor_id, agent="ConversationIntelligence", entity_type="conversation", entity_id=conv.id,
-        customer_id=conv.customer_id, input={"content_hash": digest, "prompt_version": PROMPT_VERSION},
-        output={"status": result.status.value, "intent": payload.get("intent"), "confidence": payload.get("confidence"),
-                "dropped_quotes": len(dropped), "injection_flags": injection},
-        result=AuditResult.SUCCESS if result.ok else AuditResult.FAILURE, trace_id=trace_id,
+        session,
+        company_id=company_id,
+        action="conversation.analyzed",
+        actor_type=ActorType.AGENT,
+        actor_id=actor_id,
+        agent="ConversationIntelligence",
+        entity_type="conversation",
+        entity_id=conv.id,
+        customer_id=conv.customer_id,
+        input={"content_hash": digest, "prompt_version": PROMPT_VERSION},
+        output={
+            "status": result.status.value,
+            "intent": payload.get("intent"),
+            "confidence": payload.get("confidence"),
+            "dropped_quotes": len(dropped),
+            "injection_flags": injection,
+        },
+        result=AuditResult.SUCCESS if result.ok else AuditResult.FAILURE,
+        trace_id=trace_id,
     )
     await session.flush()
     return AnalysisOutcome(
-        conversation_id=conv.id, status=result.status, cached=False, insight=insight, model=result.model,
-        dropped_quotes=dropped, injection_flags=injection,
-        needs_review=bool(insight is None or insight.confidence < LOW_CONFIDENCE), errors=result.errors,
+        conversation_id=conv.id,
+        status=result.status,
+        cached=False,
+        insight=insight,
+        model=result.model,
+        dropped_quotes=dropped,
+        injection_flags=injection,
+        needs_review=bool(insight is None or insight.confidence < LOW_CONFIDENCE),
+        errors=result.errors,
         analysis_id=row.id,
     )
 

@@ -47,9 +47,15 @@ def load_cases(path: Path) -> tuple[str, list[dict[str, Any]]]:
 
 async def _tool_calls(run_id: str) -> list[m.AuditLog]:
     async with get_sessionmaker()() as s:
-        return list((await s.scalars(
-            select(m.AuditLog).where(m.AuditLog.agent_run_id == uuid.UUID(run_id), m.AuditLog.tool.is_not(None))
-            .order_by(m.AuditLog.occurred_at))).all())
+        return list(
+            (
+                await s.scalars(
+                    select(m.AuditLog)
+                    .where(m.AuditLog.agent_run_id == uuid.UUID(run_id), m.AuditLog.tool.is_not(None))
+                    .order_by(m.AuditLog.occurred_at)
+                )
+            ).all()
+        )
 
 
 async def _no_unapproved_customer_actions(rec_id: str | None) -> bool:
@@ -84,7 +90,9 @@ def _expected_tools(run: dict[str, Any], rec: dict[str, Any] | None) -> set[str]
     return tools
 
 
-async def run_case(case: dict[str, Any], sandbox: Sandbox, *, live_provider: LLMProvider | None, settings: CompanySettings) -> dict[str, Any]:
+async def run_case(
+    case: dict[str, Any], sandbox: Sandbox, *, live_provider: LLMProvider | None, settings: CompanySettings
+) -> dict[str, Any]:
     exp, spec = case["expected"], case["llm"]
     offline = live_provider is None
     started = time.perf_counter()
@@ -105,22 +113,50 @@ async def run_case(case: dict[str, Any], sandbox: Sandbox, *, live_provider: LLM
     async with get_sessionmaker()() as s:
         run_row = await s.get(m.AgentRun, uuid.UUID(result["run_id"]))
         rec_row = await s.scalar(select(m.Recommendation).where(m.Recommendation.agent_run_id == run_row.id))
-        approval = await s.scalar(select(m.ApprovalRequest).where(m.ApprovalRequest.recommendation_id == rec_row.id)) if rec_row else None
-        followup = await s.scalar(select(m.Followup).where(m.Followup.recommendation_id == rec_row.id)) if rec_row else None
-        run = {"status": run_row.status.value, "state": run_row.state, "error": run_row.error, "trace_id": run_row.trace_id}
+        approval = (
+            await s.scalar(select(m.ApprovalRequest).where(m.ApprovalRequest.recommendation_id == rec_row.id))
+            if rec_row
+            else None
+        )
+        followup = (
+            await s.scalar(select(m.Followup).where(m.Followup.recommendation_id == rec_row.id)) if rec_row else None
+        )
+        run = {
+            "status": run_row.status.value,
+            "state": run_row.state,
+            "error": run_row.error,
+            "trace_id": run_row.trace_id,
+        }
         rec = None
         if rec_row:
-            rec = {"id": str(rec_row.id), "status": rec_row.status.value, "requires_approval": rec_row.requires_approval,
-                   "action_type": rec_row.action_type.value, "rules": {r["rule"] for r in rec_row.approval_reasons},
-                   "generated_by": rec_row.generated_by, "limitations": rec_row.limitations, "grounding": rec_row.grounding,
-                   "proposed": rec_row.proposed_action, "confidence": rec_row.confidence}
+            rec = {
+                "id": str(rec_row.id),
+                "status": rec_row.status.value,
+                "requires_approval": rec_row.requires_approval,
+                "action_type": rec_row.action_type.value,
+                "rules": {r["rule"] for r in rec_row.approval_reasons},
+                "generated_by": rec_row.generated_by,
+                "limitations": rec_row.limitations,
+                "grounding": rec_row.grounding,
+                "proposed": rec_row.proposed_action,
+                "confidence": rec_row.confidence,
+            }
     state = run["state"] or {}
     risk = state.get("risk_analysis") or {}
     reasons = {r["code"]: r["points"] for r in risk.get("reasons", [])}
-    status_map = {"awaiting_approval": "awaiting_approval", "completed": "completed", "failed": "failed", "needs_review": "needs_review"}
+    status_map = {
+        "awaiting_approval": "awaiting_approval",
+        "completed": "completed",
+        "failed": "failed",
+        "needs_review": "needs_review",
+    }
     checks: dict[str, bool | None] = {}
 
-    checks["workflow_completion"] = status_map.get(run["status"]) == exp.get("status", run["status"]) if "status" in exp else run["status"] != "failed"
+    checks["workflow_completion"] = (
+        status_map.get(run["status"]) == exp.get("status", run["status"])
+        if "status" in exp
+        else run["status"] != "failed"
+    )
     if "risk_levels" in exp or "reasons_include" in exp or "max_points" in exp:
         ok = True
         if "risk_levels" in exp:
@@ -141,31 +177,45 @@ async def run_case(case: dict[str, Any], sandbox: Sandbox, *, live_provider: LLM
             checks["approval_compliance"] = approval_ok
         else:
             primary = rec["proposed"].get("primary", {})
-            recheck = evaluate(ActionProposal(
-                ActionType(primary.get("action_type", rec["action_type"])), deal_value=Decimal(str(case["crm"]["amount"])),
-                discount_pct=Decimal(str(primary["discount_pct"])) if primary.get("discount_pct") else None,
-                confidence=rec["confidence"], policy_evidence_found=True,
-                unverified_claims=int(rec["grounding"].get("unverified_count", 0)),
-                injection_suspected="PROMPT_INJECTION_SUSPECTED" in rec["rules"],
-                generated_by_fallback=rec["generated_by"] == "rules_fallback"), settings.policy)
+            recheck = evaluate(
+                ActionProposal(
+                    ActionType(primary.get("action_type", rec["action_type"])),
+                    deal_value=Decimal(str(case["crm"]["amount"])),
+                    discount_pct=Decimal(str(primary["discount_pct"])) if primary.get("discount_pct") else None,
+                    confidence=rec["confidence"],
+                    policy_evidence_found=True,
+                    unverified_claims=int(rec["grounding"].get("unverified_count", 0)),
+                    injection_suspected="PROMPT_INJECTION_SUSPECTED" in rec["rules"],
+                    generated_by_fallback=rec["generated_by"] == "rules_fallback",
+                ),
+                settings.policy,
+            )
             # Policy may require approval for extra reasons (e.g. missing evidence); never less than the recheck.
             checks["approval_compliance"] = rec["requires_approval"] or not recheck.requires_approval
         policy_ok = await _no_unapproved_customer_actions(rec["id"])
         if (offline or not exp.get("offline_only")) and ("rules_include" in exp or "rules_exclude" in exp):
-            policy_ok &= set(exp.get("rules_include", [])) <= rec["rules"] and not (set(exp.get("rules_exclude", [])) & rec["rules"])
+            policy_ok &= set(exp.get("rules_include", [])) <= rec["rules"] and not (
+                set(exp.get("rules_exclude", [])) & rec["rules"]
+            )
         checks["policy_compliance"] = policy_ok
         if "generated_by" in exp:
             checks["failure_recovery"] = rec["generated_by"] == exp["generated_by"]
         if "limitation_contains" in exp:
-            checks["failure_recovery"] = any(exp["limitation_contains"] in x for x in rec["limitations"] + state.get("limitations", []))
+            checks["failure_recovery"] = any(
+                exp["limitation_contains"] in x for x in rec["limitations"] + state.get("limitations", [])
+            )
         if exp.get("hallucination_detected"):
             checks["hallucination_detection"] = int(rec["grounding"].get("unverified_count", 0)) > 0
         if offline and "auto_actions" in exp:
-            checks["database_update_correctness"] = followup is not None and rec["status"] == exp.get("recommendation_status", rec["status"])
+            checks["database_update_correctness"] = followup is not None and rec["status"] == exp.get(
+                "recommendation_status", rec["status"]
+            )
         elif "database_update_correctness" not in checks:
             checks["database_update_correctness"] = (followup is not None) == ("POLICY_BLOCKED" not in rec["rules"])
     elif exp.get("failure_injected"):
-        checks["failure_recovery"] = run["status"] == exp.get("status") and exp.get("error_contains", "") in (run["error"] or "")
+        checks["failure_recovery"] = run["status"] == exp.get("status") and exp.get("error_contains", "") in (
+            run["error"] or ""
+        )
 
     calls = await _tool_calls(result["run_id"])
     called = {c.tool for c in calls}
@@ -179,7 +229,9 @@ async def run_case(case: dict[str, Any], sandbox: Sandbox, *, live_provider: LLM
         if c.tool == "request_human_approval" and approval is not None:
             arg_ok &= args.get("required_role") == approval.required_role
     if "PRICE_OBJECTION" in reasons and rec is not None:
-        docs = [d for c in calls if c.tool == "search_knowledge_base" for d in (c.input or {}).get("document_types", [])]
+        docs = [
+            d for c in calls if c.tool == "search_knowledge_base" for d in (c.input or {}).get("document_types", [])
+        ]
         arg_ok &= "discount_policy" in docs
     checks["tool_argument_accuracy"] = arg_ok
 
@@ -188,8 +240,14 @@ async def run_case(case: dict[str, Any], sandbox: Sandbox, *, live_provider: LLM
         d, after = case["decision"], exp["after_decision"]
         principal = sandbox.principals[UserRole(d["by"]).value]
         try:
-            decision_out = await decide_approval(principal, approval.id, decision=d["decision"], note="eval", edits=d.get("edits"),
-                                                 deps=ToolDeps(provider=provider))
+            decision_out = await decide_approval(
+                principal,
+                approval.id,
+                decision=d["decision"],
+                note="eval",
+                edits=d.get("edits"),
+                deps=ToolDeps(provider=provider),
+            )
             error = None
         except AppError as exc:
             error = exc.code.value
@@ -205,26 +263,49 @@ async def run_case(case: dict[str, Any], sandbox: Sandbox, *, live_provider: LLM
                 if "execution_ok" in after:
                     db_ok &= bool(decision_out and decision_out["execution"]["ok"]) == after["execution_ok"]
                 if "actions" in after:
-                    db_ok &= [r["tool"] for r in (decision_out or {}).get("execution", {}).get("results", []) if r["ok"]] == after["actions"]
+                    db_ok &= [
+                        r["tool"] for r in (decision_out or {}).get("execution", {}).get("results", []) if r["ok"]
+                    ] == after["actions"]
                 if "revised_total" in after:
-                    revised = await s.scalar(select(m.Quote).where(m.Quote.opportunity_id == refs["opportunity_id"], m.Quote.version == 2))
+                    revised = await s.scalar(
+                        select(m.Quote).where(m.Quote.opportunity_id == refs["opportunity_id"], m.Quote.version == 2)
+                    )
                     db_ok &= revised is not None and float(revised.total) == after["revised_total"]
                 if after.get("verification_passed"):
                     db_ok &= bool(decision_out and decision_out["verification"]["all_passed"])
                 if after.get("no_customer_actions"):
                     db_ok &= not customer_actions
-            checks["policy_compliance"] = checks.get("policy_compliance", True) and await _no_unapproved_customer_actions(rec["id"])
+            checks["policy_compliance"] = checks.get(
+                "policy_compliance", True
+            ) and await _no_unapproved_customer_actions(rec["id"])
         checks["database_update_correctness"] = checks.get("database_update_correctness", True) and db_ok
 
     applicable = {k: v for k, v in checks.items() if v is not None}
     return {
-        "case_key": case["key"], "description": case["description"], "tags": case["tags"], "passed": all(applicable.values()),
-        "scores": applicable, "latency_ms": int((time.perf_counter() - started) * 1000),
-        "output": {"run_status": run["status"], "risk_level": risk.get("risk_level"), "risk_score": risk.get("risk_score"),
-                   "reasons": sorted(reasons), "recommendation": rec and {k: (sorted(v) if isinstance(v, set) else v)
-                                                                         for k, v in rec.items() if k not in ("proposed", "grounding")},
-                   "grounding": rec and rec["grounding"], "tools_called": sorted(called), "expected_tools": sorted(expected_tools),
-                   "decision": decision_out and {"status": decision_out["status"]}, "error": run["error"], "trace_id": run["trace_id"]},
+        "case_key": case["key"],
+        "description": case["description"],
+        "tags": case["tags"],
+        "passed": all(applicable.values()),
+        "scores": applicable,
+        "latency_ms": int((time.perf_counter() - started) * 1000),
+        "output": {
+            "run_status": run["status"],
+            "risk_level": risk.get("risk_level"),
+            "risk_score": risk.get("risk_score"),
+            "reasons": sorted(reasons),
+            "recommendation": rec
+            and {
+                k: (sorted(v) if isinstance(v, set) else v)
+                for k, v in rec.items()
+                if k not in ("proposed", "grounding")
+            },
+            "grounding": rec and rec["grounding"],
+            "tools_called": sorted(called),
+            "expected_tools": sorted(expected_tools),
+            "decision": decision_out and {"status": decision_out["status"]},
+            "error": run["error"],
+            "trace_id": run["trace_id"],
+        },
         "expected": exp,
     }
 
@@ -240,7 +321,10 @@ def aggregate(results: list[dict[str, Any]], live: bool) -> dict[str, Any]:
         total_claims = sum(int(r["output"]["grounding"].get("total", 0)) for r in graded)
         unverified = sum(int(r["output"]["grounding"].get("unverified_count", 0)) for r in graded)
         if total_claims:
-            metrics["hallucination_rate"] = {"value": round(unverified / max(total_claims, 1), 4), "n": total_claims,
-                                             "description": "unverified policy claims + unsupported email figures / policy claims"}
+            metrics["hallucination_rate"] = {
+                "value": round(unverified / max(total_claims, 1), 4),
+                "n": total_claims,
+                "description": "unverified policy claims + unsupported email figures / policy claims",
+            }
     metrics["case_pass_rate"] = {"value": round(sum(r["passed"] for r in results) / len(results), 4), "n": len(results)}
     return metrics

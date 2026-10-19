@@ -57,19 +57,40 @@ async def run_agent(mode: EvalMode, limit: int | None) -> None:
     results = []
     for i, case in enumerate(cases, start=1):
         try:
-            results.append(await agent_eval.run_case(case, sandbox, live_provider=live_provider, settings=CompanySettings()))
+            results.append(
+                await agent_eval.run_case(case, sandbox, live_provider=live_provider, settings=CompanySettings())
+            )
         except Exception as exc:  # noqa: BLE001 - an evaluator crash is a failed case, never a skipped one
             log.exception("case crashed", extra={"case": case["key"]})
-            results.append({"case_key": case["key"], "description": case["description"], "tags": case["tags"], "passed": False,
-                            "scores": {"workflow_completion": False}, "output": {"error": f"{exc.__class__.__name__}: {exc}"},
-                            "expected": case["expected"], "latency_ms": None})
+            results.append(
+                {
+                    "case_key": case["key"],
+                    "description": case["description"],
+                    "tags": case["tags"],
+                    "passed": False,
+                    "scores": {"workflow_completion": False},
+                    "output": {"error": f"{exc.__class__.__name__}: {exc}"},
+                    "expected": case["expected"],
+                    "latency_ms": None,
+                }
+            )
         mark = "PASS" if results[-1]["passed"] else "FAIL"
         print(f"  [{i:02d}/{len(cases)}] {mark} {case['key']}", flush=True)
     metrics = agent_eval.aggregate(results, live=mode == EvalMode.LIVE)
-    note = ("Scripted LLM outputs per scenario; measures workflow, guardrails, tool use and DB effects deterministically."
-            if mode == EvalMode.OFFLINE else "Real model outputs; approval compliance checked by independent policy re-evaluation.")
-    saved = await save_run(suite=EvalSuite.AGENT, mode=mode, dataset_version=version,
-                           model=None if mode == EvalMode.OFFLINE else get_settings().groq_model, results=results, metrics=metrics, notes=note)
+    note = (
+        "Scripted LLM outputs per scenario; measures workflow, guardrails, tool use and DB effects deterministically."
+        if mode == EvalMode.OFFLINE
+        else "Real model outputs; approval compliance checked by independent policy re-evaluation."
+    )
+    saved = await save_run(
+        suite=EvalSuite.AGENT,
+        mode=mode,
+        dataset_version=version,
+        model=None if mode == EvalMode.OFFLINE else get_settings().groq_model,
+        results=results,
+        metrics=metrics,
+        notes=note,
+    )
     _print(f"agent ({mode.value})", metrics, saved)
 
 
@@ -90,10 +111,19 @@ async def run_rag(mode: EvalMode, limit: int | None, use_ragas: bool) -> None:
         for i, q in enumerate(questions, start=1):
             results.append(await rag_eval.run_live_case(q, retriever, sandbox.company_id, provider, ragas))
             print(f"  [{i:02d}/{len(questions)}] {q['key']}: {results[-1]['output']['status']}", flush=True)
-        note = "Groq grounded answers with verified citations" + ("; Ragas judge = same Groq model." if ragas else "; Ragas disabled.")
+        note = "Groq grounded answers with verified citations" + (
+            "; Ragas judge = same Groq model." if ragas else "; Ragas disabled."
+        )
     metrics = rag_eval.aggregate(results)
-    saved = await save_run(suite=EvalSuite.RAG, mode=mode, dataset_version="rag-v1",
-                           model=None if mode == EvalMode.OFFLINE else get_settings().groq_model, results=results, metrics=metrics, notes=note)
+    saved = await save_run(
+        suite=EvalSuite.RAG,
+        mode=mode,
+        dataset_version="rag-v1",
+        model=None if mode == EvalMode.OFFLINE else get_settings().groq_model,
+        results=results,
+        metrics=metrics,
+        notes=note,
+    )
     _print(f"rag ({mode.value})", metrics, saved)
 
 
@@ -113,8 +143,15 @@ async def run_copilot(limit: int | None) -> None:
         results.append(await copilot_eval.run_case(case, principal, provider, company.id))
         print(f"  [{i:02d}/{len(cases)}] {'PASS' if results[-1]['passed'] else 'FAIL'} {case['key']}", flush=True)
     metrics = agent_eval.aggregate(results, live=False)
-    saved = await save_run(suite=EvalSuite.COPILOT, mode=EvalMode.LIVE, dataset_version="copilot-v1", model=get_settings().groq_model,
-                           results=results, metrics=metrics, notes="Real Groq tool calling over read-only tools on the demo tenant.")
+    saved = await save_run(
+        suite=EvalSuite.COPILOT,
+        mode=EvalMode.LIVE,
+        dataset_version="copilot-v1",
+        model=get_settings().groq_model,
+        results=results,
+        metrics=metrics,
+        notes="Real Groq tool calling over read-only tools on the demo tenant.",
+    )
     _print("copilot (live)", metrics, saved)
 
 
@@ -140,7 +177,9 @@ async def main() -> None:
             if mode == EvalMode.LIVE:
                 await run_copilot(args.limit)
             else:
-                print("\n== copilot == skipped: tool-selection accuracy is only meaningful with a real model (live mode)")
+                print(
+                    "\n== copilot == skipped: tool-selection accuracy is only meaningful with a real model (live mode)"
+                )
     finally:
         await get_engine().dispose()
 

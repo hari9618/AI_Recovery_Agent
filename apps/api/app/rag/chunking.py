@@ -36,7 +36,7 @@ def parse_front_matter(text: str) -> tuple[dict[str, str], str]:
             meta[current_key] = value.strip().strip('"').strip("'").lstrip(">").strip()
         elif current_key and line.startswith((" ", "\t")):
             meta[current_key] = (meta[current_key] + " " + line.strip()).strip()
-    return meta, text[match.end():]
+    return meta, text[match.end() :]
 
 
 def _split_long(text: str, target: int, overlap: int) -> list[str]:
@@ -83,7 +83,7 @@ def chunk_markdown(text: str, *, title: str, target_chars: int = 1200, overlap_c
         if preamble:
             sections.append((title, preamble))
         for i, h in enumerate(headings):
-            body = text[h.end(): headings[i + 1].start() if i + 1 < len(headings) else len(text)].strip()
+            body = text[h.end() : headings[i + 1].start() if i + 1 < len(headings) else len(text)].strip()
             level, name = len(h.group(1)), h.group(2).strip()
             if level == 1 and not body:
                 continue
@@ -99,4 +99,8 @@ def chunk_markdown(text: str, *, title: str, target_chars: int = 1200, overlap_c
 
 
 def chunk_plain(text: str, *, title: str, target_chars: int = 1200, overlap_chars: int = 150) -> list[Chunk]:
-    return [Chunk(i, title, piece) for i, piece in enumerate(_split_long(text.strip(), target_chars, overlap_chars)) if piece]
+    return [
+        Chunk(i, title, piece)
+        for i, piece in enumerate(_split_long(text.strip(), target_chars, overlap_chars))
+        if piece
+    ]

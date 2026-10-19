@@ -86,13 +86,23 @@ async def generate_structured(
     for attempt in range(1, max_attempts + 1):
         try:
             response = await provider.complete(
-                conversation, purpose=purpose, response_model=response_model,
-                temperature=temperature, max_tokens=max_tokens,
+                conversation,
+                purpose=purpose,
+                response_model=response_model,
+                temperature=temperature,
+                max_tokens=max_tokens,
             )
         except LLMError as exc:
             if exc.code != ErrorCode.LLM_INVALID_OUTPUT:
-                await record_llm_call(purpose=purpose, provider=provider.name, model=provider.model,
-                                      status=LLMCallStatus.ERROR, usage=usage, attempts=attempt, error=exc.message)
+                await record_llm_call(
+                    purpose=purpose,
+                    provider=provider.name,
+                    model=provider.model,
+                    status=LLMCallStatus.ERROR,
+                    usage=usage,
+                    attempts=attempt,
+                    error=exc.message,
+                )
                 raise
             errors.append(f"attempt {attempt}: provider schema validation failed")
             conversation = [*messages, ChatMessage(role="user", content=_repair_prompt(errors[-1]))]
@@ -103,7 +113,9 @@ async def generate_structured(
         except (ValidationError, ValueError) as exc:
             summary = _error_summary(exc)
             errors.append(f"attempt {attempt}: {summary}")
-            logger.warning("structured output invalid", extra={"purpose": purpose, "attempt": attempt, "error": summary})
+            logger.warning(
+                "structured output invalid", extra={"purpose": purpose, "attempt": attempt, "error": summary}
+            )
             conversation = [
                 *messages,
                 ChatMessage(role="assistant", content=(response.content or "")[:4000]),
@@ -111,20 +123,37 @@ async def generate_structured(
             ]
             continue
         status = LLMCallStatus.OK if attempt == 1 else LLMCallStatus.REPAIRED
-        await record_llm_call(purpose=purpose, provider=provider.name, model=response.model, status=status,
-                              usage=usage, attempts=attempt, error="; ".join(errors) or None)
+        await record_llm_call(
+            purpose=purpose,
+            provider=provider.name,
+            model=response.model,
+            status=status,
+            usage=usage,
+            attempts=attempt,
+            error="; ".join(errors) or None,
+        )
         return StructuredResult(value, status, response.model, attempt, usage, errors)
 
     # All attempts failed validation: never accept malformed output.
     with get_tracer().observation(
-        f"structured_output_failure:{purpose}", as_type="guardrail", input={"errors": errors},
+        f"structured_output_failure:{purpose}",
+        as_type="guardrail",
+        input={"errors": errors},
         metadata={"schema": response_model.__name__},
     ) as obs:
         obs.update(level="ERROR", status_message=f"{len(errors)} invalid attempts; using fallback")
-    await record_llm_call(purpose=purpose, provider=provider.name, model=provider.model,
-                          status=LLMCallStatus.FALLBACK, usage=usage, attempts=max_attempts, error="; ".join(errors))
-    return StructuredResult(fallback() if fallback else None, LLMCallStatus.FALLBACK, provider.model,
-                            max_attempts, usage, errors)
+    await record_llm_call(
+        purpose=purpose,
+        provider=provider.name,
+        model=provider.model,
+        status=LLMCallStatus.FALLBACK,
+        usage=usage,
+        attempts=max_attempts,
+        error="; ".join(errors),
+    )
+    return StructuredResult(
+        fallback() if fallback else None, LLMCallStatus.FALLBACK, provider.model, max_attempts, usage, errors
+    )
 
 
 def _repair_prompt(error: str) -> str:

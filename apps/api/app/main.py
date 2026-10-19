@@ -27,8 +27,14 @@ logger = logging.getLogger("app")
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     configure_logging(settings.log_level)
-    logger.info("api starting", extra={"env": settings.environment, "llm_configured": settings.llm_configured,
-                                       "langfuse": settings.langfuse_configured})
+    logger.info(
+        "api starting",
+        extra={
+            "env": settings.environment,
+            "llm_configured": settings.llm_configured,
+            "langfuse": settings.langfuse_configured,
+        },
+    )
     yield
     get_tracer().flush()
     await get_engine().dispose()
@@ -40,12 +46,15 @@ def create_app() -> FastAPI:
         title="AI Revenue Recovery Agent API",
         version="0.1.0",
         description="Finds, explains, prioritises and helps recover at-risk revenue. All AI output is grounded, "
-                    "policy-checked and, for risky actions, human-approved.",
+        "policy-checked and, for risky actions, human-approved.",
         lifespan=lifespan,
     )
     app.add_middleware(
-        CORSMiddleware, allow_origins=settings.cors_origins, allow_credentials=False,
-        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"], allow_headers=["Authorization", "Content-Type"],
+        CORSMiddleware,
+        allow_origins=settings.cors_origins,
+        allow_credentials=False,
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+        allow_headers=["Authorization", "Content-Type"],
     )
 
     @app.middleware("http")
@@ -55,8 +64,16 @@ def create_app() -> FastAPI:
         response = await call_next(request)
         response.headers["x-request-id"] = request_id
         response.headers["x-content-type-options"] = "nosniff"
-        logger.info("request", extra={"method": request.method, "path": request.url.path, "status": response.status_code,
-                                      "ms": int((time.perf_counter() - started) * 1000), "request_id": request_id})
+        logger.info(
+            "request",
+            extra={
+                "method": request.method,
+                "path": request.url.path,
+                "status": response.status_code,
+                "ms": int((time.perf_counter() - started) * 1000),
+                "request_id": request_id,
+            },
+        )
         return response
 
     @app.exception_handler(AppError)

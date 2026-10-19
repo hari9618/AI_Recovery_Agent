@@ -148,51 +148,73 @@ async def build_signals(
     ids = [o.id for o in opps]
 
     segments = dict(
-        (await session.execute(
-            select(m.Customer.id, m.Customer.segment).where(m.Customer.id.in_({o.customer_id for o in opps}))
-        )).all()
+        (
+            await session.execute(
+                select(m.Customer.id, m.Customer.segment).where(m.Customer.id.in_({o.customer_id for o in opps}))
+            )
+        ).all()
     )
     win_rates = await historical_win_rates(session, company_id, now)
     competitors = await known_competitors(session, company_id)
 
     quotes_by_opp: dict[uuid.UUID, m.Quote] = {}
-    for q in (await session.scalars(
-        select(m.Quote).where(m.Quote.opportunity_id.in_(ids)).order_by(m.Quote.sent_at.asc().nulls_first())
-    )).all():
+    for q in (
+        await session.scalars(
+            select(m.Quote).where(m.Quote.opportunity_id.in_(ids)).order_by(m.Quote.sent_at.asc().nulls_first())
+        )
+    ).all():
         quotes_by_opp[q.opportunity_id] = q  # latest by sent_at wins
 
     rep_touch: dict[uuid.UUID, datetime] = dict(
-        (await session.execute(
-            select(m.Activity.opportunity_id, func.max(m.Activity.occurred_at))
-            .where(m.Activity.opportunity_id.in_(ids), m.Activity.type.in_(REP_TOUCH_TYPES), m.Activity.user_id.is_not(None))
-            .group_by(m.Activity.opportunity_id)
-        )).all()
+        (
+            await session.execute(
+                select(m.Activity.opportunity_id, func.max(m.Activity.occurred_at))
+                .where(
+                    m.Activity.opportunity_id.in_(ids),
+                    m.Activity.type.in_(REP_TOUCH_TYPES),
+                    m.Activity.user_id.is_not(None),
+                )
+                .group_by(m.Activity.opportunity_id)
+            )
+        ).all()
     )
     overdue: dict[uuid.UUID, int] = dict(
-        (await session.execute(
-            select(m.Followup.opportunity_id, func.count())
-            .where(m.Followup.opportunity_id.in_(ids), m.Followup.status == FollowupStatus.PENDING, m.Followup.due_at < now)
-            .group_by(m.Followup.opportunity_id)
-        )).all()
+        (
+            await session.execute(
+                select(m.Followup.opportunity_id, func.count())
+                .where(
+                    m.Followup.opportunity_id.in_(ids),
+                    m.Followup.status == FollowupStatus.PENDING,
+                    m.Followup.due_at < now,
+                )
+                .group_by(m.Followup.opportunity_id)
+            )
+        ).all()
     )
 
     convs = (await session.scalars(select(m.Conversation).where(m.Conversation.opportunity_id.in_(ids)))).all()
     conv_ids = [c.id for c in convs]
     messages: dict[uuid.UUID, list[m.ConversationMessage]] = defaultdict(list)
     if conv_ids:
-        for msg in (await session.scalars(
-            select(m.ConversationMessage).where(m.ConversationMessage.conversation_id.in_(conv_ids)).order_by(m.ConversationMessage.sent_at)
-        )).all():
+        for msg in (
+            await session.scalars(
+                select(m.ConversationMessage)
+                .where(m.ConversationMessage.conversation_id.in_(conv_ids))
+                .order_by(m.ConversationMessage.sent_at)
+            )
+        ).all():
             messages[msg.conversation_id].append(msg)
     analyses: dict[tuple[uuid.UUID, str], ConversationInsight] = {}
     if conv_ids:
-        for a in (await session.scalars(
-            select(m.ConversationAnalysis).where(
-                m.ConversationAnalysis.conversation_id.in_(conv_ids),
-                m.ConversationAnalysis.prompt_version == PROMPT_VERSION,
-                m.ConversationAnalysis.status.in_((LLMCallStatus.OK, LLMCallStatus.REPAIRED)),
+        for a in (
+            await session.scalars(
+                select(m.ConversationAnalysis).where(
+                    m.ConversationAnalysis.conversation_id.in_(conv_ids),
+                    m.ConversationAnalysis.prompt_version == PROMPT_VERSION,
+                    m.ConversationAnalysis.status.in_((LLMCallStatus.OK, LLMCallStatus.REPAIRED)),
+                )
             )
-        )).all():
+        ).all():
             analyses[(a.conversation_id, a.content_hash)] = ConversationInsight.from_stored(a.analysis)
     convs_by_opp: dict[uuid.UUID, list[m.Conversation]] = defaultdict(list)
     for c in convs:
@@ -208,7 +230,11 @@ async def build_signals(
         last_rep = max([t for t in candidates if t], default=None)
         # Customer is waiting if their messages came after our last reply.
         waiting_since = next(
-            (x.sent_at for x in opp_msgs if x.sender_type == SenderType.CUSTOMER and (last_rep is None or x.sent_at > last_rep)),
+            (
+                x.sent_at
+                for x in opp_msgs
+                if x.sender_type == SenderType.CUSTOMER and (last_rep is None or x.sent_at > last_rep)
+            ),
             None,
         )
         llm_insights, heuristic_texts = [], []
@@ -281,7 +307,9 @@ async def recompute_risks(
     return rows
 
 
-def to_row(company_id: uuid.UUID, opp: m.Opportunity, sig: RiskSignals, a: RiskAssessment, now: datetime) -> m.RevenueRisk:
+def to_row(
+    company_id: uuid.UUID, opp: m.Opportunity, sig: RiskSignals, a: RiskAssessment, now: datetime
+) -> m.RevenueRisk:
     return m.RevenueRisk(
         company_id=company_id,
         opportunity_id=opp.id,
@@ -298,4 +326,3 @@ def to_row(company_id: uuid.UUID, opp: m.Opportunity, sig: RiskSignals, a: RiskA
         is_current=True,
         computed_at=now,
     )
-

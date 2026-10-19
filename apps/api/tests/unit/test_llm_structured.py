@@ -11,12 +11,19 @@ from app.llm.structured import generate_structured, parse_json_object
 from tests.fakes import ScriptedLLM
 
 VALID = {
-    "intent": "high", "buying_stage": "decision", "urgency": "medium", "budget_signal": "constrained",
+    "intent": "high",
+    "buying_stage": "decision",
+    "urgency": "medium",
+    "budget_signal": "constrained",
     "objections": [{"type": "price", "detail": "Wants a lower price", "quote": "can you do better on the price?"}],
     "competitor_mentions": [{"name": "Voltrix Systems", "context": "quoted 4.1L"}],
-    "decision_maker_status": "engaged", "customer_waiting_on": "revised price", "next_action": "send_revised_quote",
-    "sentiment": "positive", "summary": "Customer wants to buy but needs a better price.",
-    "evidence_quotes": ["can you do better on the price?"], "confidence": 0.9,
+    "decision_maker_status": "engaged",
+    "customer_waiting_on": "revised price",
+    "next_action": "send_revised_quote",
+    "sentiment": "positive",
+    "summary": "Customer wants to buy but needs a better price.",
+    "evidence_quotes": ["can you do better on the price?"],
+    "confidence": 0.9,
 }
 MSGS = [ChatMessage(role="system", content="sys"), ChatMessage(role="user", content="transcript")]
 FENCE = "`" * 3

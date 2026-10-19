@@ -59,8 +59,14 @@ class RetrievalResult:
         return "OK" if self.sufficient else "INSUFFICIENT_EVIDENCE"
 
     def as_dict(self) -> dict[str, Any]:
-        return {"query": self.query, "status": self.status, "evidence": [e.as_dict() for e in self.evidence],
-                "timings_ms": self.timings_ms, "candidates": self.candidates, "reranker": self.reranker}
+        return {
+            "query": self.query,
+            "status": self.status,
+            "evidence": [e.as_dict() for e in self.evidence],
+            "timings_ms": self.timings_ms,
+            "candidates": self.candidates,
+            "reranker": self.reranker,
+        }
 
 
 class _BM25Cache:
@@ -72,22 +78,30 @@ class _BM25Cache:
 
     async def get(self, session: AsyncSession, company_id: uuid.UUID) -> tuple[BM25Index, dict[str, Any]]:
         version = tuple(
-            (await session.execute(
-                select(func.count(m.DocumentChunk.id), func.max(m.Document.updated_at))
-                .select_from(m.DocumentChunk).join(m.Document, m.Document.id == m.DocumentChunk.document_id)
-                .where(m.DocumentChunk.company_id == company_id, m.Document.is_active.is_(True))
-            )).one()
+            (
+                await session.execute(
+                    select(func.count(m.DocumentChunk.id), func.max(m.Document.updated_at))
+                    .select_from(m.DocumentChunk)
+                    .join(m.Document, m.Document.id == m.DocumentChunk.document_id)
+                    .where(m.DocumentChunk.company_id == company_id, m.Document.is_active.is_(True))
+                )
+            ).one()
         )
         cached = self._entries.get(company_id)
         if cached and cached[0] == version:
             return cached[1], cached[2]
         async with self._lock:
-            rows = (await session.execute(
-                select(m.DocumentChunk.id, m.DocumentChunk.content, m.DocumentChunk.document_type)
-                .join(m.Document, m.Document.id == m.DocumentChunk.document_id)
-                .where(m.DocumentChunk.company_id == company_id, m.Document.is_active.is_(True),
-                       m.Document.status == DocumentStatus.INDEXED)
-            )).all()
+            rows = (
+                await session.execute(
+                    select(m.DocumentChunk.id, m.DocumentChunk.content, m.DocumentChunk.document_type)
+                    .join(m.Document, m.Document.id == m.DocumentChunk.document_id)
+                    .where(
+                        m.DocumentChunk.company_id == company_id,
+                        m.Document.is_active.is_(True),
+                        m.Document.status == DocumentStatus.INDEXED,
+                    )
+                )
+            ).all()
             meta = {str(r.id): {"document_type": r.document_type} for r in rows}
             index = BM25Index.build({str(r.id): r.content for r in rows})
             self._entries[company_id] = (version, index, meta)
@@ -106,14 +120,23 @@ class HybridRetriever:
         self.reranker = reranker
         self.settings = get_settings()
 
-    async def _vector_search(self, session: AsyncSession, company_id: uuid.UUID, query_vec: list[float],
-                             doc_types: list[DocumentType] | None, k: int) -> list[str]:
+    async def _vector_search(
+        self,
+        session: AsyncSession,
+        company_id: uuid.UUID,
+        query_vec: list[float],
+        doc_types: list[DocumentType] | None,
+        k: int,
+    ) -> list[str]:
         distance = m.DocumentChunk.embedding.cosine_distance(query_vec)
         q = (
             select(m.DocumentChunk.id)
             .join(m.Document, m.Document.id == m.DocumentChunk.document_id)
-            .where(m.DocumentChunk.company_id == company_id, m.Document.is_active.is_(True),
-                   m.Document.status == DocumentStatus.INDEXED)
+            .where(
+                m.DocumentChunk.company_id == company_id,
+                m.Document.is_active.is_(True),
+                m.Document.status == DocumentStatus.INDEXED,
+            )
             .order_by(distance)
             .limit(k)
         )
@@ -135,14 +158,20 @@ class HybridRetriever:
         k = s.rag_candidate_k
         tracer = get_tracer()
         timings: dict[str, int] = {}
-        with tracer.observation("hybrid_retrieval", as_type="retriever", input={"query": query, "doc_types": [d.value for d in doc_types or []]}) as root:
+        with tracer.observation(
+            "hybrid_retrieval",
+            as_type="retriever",
+            input={"query": query, "doc_types": [d.value for d in doc_types or []]},
+        ) as root:
             t0 = time.perf_counter()
 
             async def lexical() -> list[str]:
                 with tracer.observation("bm25", as_type="retriever", input={"query": query}) as span:
                     start = time.perf_counter()
                     index, meta = await BM25_CACHE.get(session, company_id)
-                    allowed = {cid for cid, md in meta.items() if md["document_type"] in doc_types} if doc_types else None
+                    allowed = (
+                        {cid for cid, md in meta.items() if md["document_type"] in doc_types} if doc_types else None
+                    )
                     hits = index.search(query, k, allowed)
                     timings["bm25"] = int((time.perf_counter() - start) * 1000)
                     span.update(output={"hits": len(hits), "top": hits[:3]})
@@ -164,23 +193,32 @@ class HybridRetriever:
             bm25_ids = await lexical()
             vector_ids = await dense(embedding_task)
             fused = reciprocal_rank_fusion({"bm25": bm25_ids, "vector": vector_ids}, k=s.rag_rrf_k)[:k]
-            timings["fusion"] = int((time.perf_counter() - t0) * 1000) - timings.get("bm25", 0) - timings.get("vector", 0)
+            timings["fusion"] = (
+                int((time.perf_counter() - t0) * 1000) - timings.get("bm25", 0) - timings.get("vector", 0)
+            )
             if not fused:
                 root.update(output={"status": "INSUFFICIENT_EVIDENCE", "reason": "no candidates"})
                 return RetrievalResult(query, [], False, timings, {"bm25": 0, "vector": 0, "fused": 0})
 
             ids = [uuid.UUID(f[0]) for f in fused]
-            rows = (await session.execute(
-                select(m.DocumentChunk, m.Document.title, m.Document.version)
-                .join(m.Document, m.Document.id == m.DocumentChunk.document_id)
-                .where(m.DocumentChunk.id.in_(ids))
-            )).all()
+            rows = (
+                await session.execute(
+                    select(m.DocumentChunk, m.Document.title, m.Document.version)
+                    .join(m.Document, m.Document.id == m.DocumentChunk.document_id)
+                    .where(m.DocumentChunk.id.in_(ids))
+                )
+            ).all()
             by_id = {str(r[0].id): r for r in rows}
             candidates = [(f, by_id[f[0]]) for f in fused if f[0] in by_id]
 
             rerank_scores: list[float | None] = [None] * len(candidates)
             if self.reranker is not None:
-                with tracer.observation("rerank", as_type="span", input={"candidates": len(candidates)}, metadata={"model": self.reranker.name}) as span:
+                with tracer.observation(
+                    "rerank",
+                    as_type="span",
+                    input={"candidates": len(candidates)},
+                    metadata={"model": self.reranker.name},
+                ) as span:
                     start = time.perf_counter()
                     rerank_scores = list(await self.reranker.ascore(query, [c[1][0].content for c in candidates]))
                     timings["rerank"] = int((time.perf_counter() - start) * 1000)
@@ -192,23 +230,47 @@ class HybridRetriever:
             evidence: list[Evidence] = []
             for i in order[:top_k]:
                 (doc_id, rrf, ranks), (chunk, title, version) = candidates[i]
-                evidence.append(Evidence(
-                    evidence_id=f"E{len(evidence) + 1}", chunk_id=doc_id, document_id=str(chunk.document_id),
-                    document_title=title, document_type=chunk.document_type.value, section=chunk.section,
-                    version=version, content=chunk.content, flagged_injection=chunk.flagged_injection,
-                    scores={"rrf": round(rrf, 5), "bm25_rank": ranks.get("bm25"), "vector_rank": ranks.get("vector"),
-                            "rerank": round(rerank_scores[i], 4) if rerank_scores[i] is not None else None},
-                ))
+                evidence.append(
+                    Evidence(
+                        evidence_id=f"E{len(evidence) + 1}",
+                        chunk_id=doc_id,
+                        document_id=str(chunk.document_id),
+                        document_title=title,
+                        document_type=chunk.document_type.value,
+                        section=chunk.section,
+                        version=version,
+                        content=chunk.content,
+                        flagged_injection=chunk.flagged_injection,
+                        scores={
+                            "rrf": round(rrf, 5),
+                            "bm25_rank": ranks.get("bm25"),
+                            "vector_rank": ranks.get("vector"),
+                            "rerank": round(rerank_scores[i], 4) if rerank_scores[i] is not None else None,
+                        },
+                    )
+                )
             if self.reranker is not None:
                 evidence = [e for e in evidence if (e.scores["rerank"] or 0) >= s.rag_min_relevance]
                 for n, e in enumerate(evidence, start=1):
                     e.evidence_id = f"E{n}"
             sufficient = bool(evidence)
             timings["total"] = int((time.perf_counter() - t0) * 1000)
-            result = RetrievalResult(query, evidence, sufficient, timings,
-                                     {"bm25": len(bm25_ids), "vector": len(vector_ids), "fused": len(fused)},
-                                     self.reranker.name if self.reranker else None)
-            root.update(output={"status": result.status, "evidence": [
-                {"id": e.evidence_id, "doc": e.document_title, "section": e.section, "score": e.retrieval_score} for e in evidence
-            ], "timings_ms": timings})
+            result = RetrievalResult(
+                query,
+                evidence,
+                sufficient,
+                timings,
+                {"bm25": len(bm25_ids), "vector": len(vector_ids), "fused": len(fused)},
+                self.reranker.name if self.reranker else None,
+            )
+            root.update(
+                output={
+                    "status": result.status,
+                    "evidence": [
+                        {"id": e.evidence_id, "doc": e.document_title, "section": e.section, "score": e.retrieval_score}
+                        for e in evidence
+                    ],
+                    "timings_ms": timings,
+                }
+            )
             return result

@@ -41,12 +41,21 @@ async def load_demo(session: AsyncSession, *, seed: int | None = None) -> dict[s
     levels: dict[str, int] = {}
     for r in risks:
         levels[r.risk_level.value] = levels.get(r.risk_level.value, 0) + 1
-    record_audit(session, company_id=company_id, action="demo.loaded", actor_type=ActorType.SYSTEM,
-                 output={"counts": counts, "documents": len(docs), "risk_levels": levels})
+    record_audit(
+        session,
+        company_id=company_id,
+        action="demo.loaded",
+        actor_type=ActorType.SYSTEM,
+        output={"counts": counts, "documents": len(docs), "risk_levels": levels},
+    )
     await session.commit()
     return {
-        "company_id": str(company_id), "counts": counts, "documents_indexed": len(docs),
+        "company_id": str(company_id),
+        "counts": counts,
+        "documents_indexed": len(docs),
         "flagged_documents": [d.document.title for d in docs if d.injection_findings],
-        "risk_levels": levels, "seconds": round(time.perf_counter() - t0, 1),
-        "scenario": dataset.ground_truth.get("vertex"), "label": "synthetic_demo",
+        "risk_levels": levels,
+        "seconds": round(time.perf_counter() - t0, 1),
+        "scenario": dataset.ground_truth.get("vertex"),
+        "label": "synthetic_demo",
     }

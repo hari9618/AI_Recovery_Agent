@@ -26,9 +26,7 @@ def test_healthy_deal_is_low_risk_with_no_revenue_at_risk():
     assert a.recommended_next_step.startswith("No action")
 
 
-@pytest.mark.parametrize(
-    ("days", "points"), [(2, 0), (4, 10), (6.9, 10), (7, 18), (13, 18), (14, 25), (40, 25)]
-)
+@pytest.mark.parametrize(("days", "points"), [(2, 0), (4, 10), (6.9, 10), (7, 18), (13, 18), (14, 25), (40, 25)])
 def test_no_contact_bands(days, points):
     a = assess(sig(stage=OpportunityStage.QUALIFICATION, days_since_rep_contact=days), S)
     got = {r.code: r.points for r in a.reasons}.get(ReasonCode.NO_RECENT_CONTACT, 0)
@@ -74,11 +72,21 @@ def test_late_stage_only_amplifies_existing_risk():
 def test_vertex_like_scenario_is_critical_and_fully_explained():
     a = assess(
         sig(
-            stage=OpportunityStage.NEGOTIATION, deal_value=Decimal("480000"),
-            days_since_rep_contact=7, customer_waiting_days=5, live_quote=True, days_since_quote=7,
-            days_to_quote_expiry=14, overdue_followups=1, intent="high", intent_source=SignalSource.LLM_ANALYSIS,
-            competitor_mentioned=True, competitors=("Voltrix Systems",), competitor_source=SignalSource.LLM_ANALYSIS,
-            price_objection=True, price_objection_source=SignalSource.LLM_ANALYSIS,
+            stage=OpportunityStage.NEGOTIATION,
+            deal_value=Decimal("480000"),
+            days_since_rep_contact=7,
+            customer_waiting_days=5,
+            live_quote=True,
+            days_since_quote=7,
+            days_to_quote_expiry=14,
+            overdue_followups=1,
+            intent="high",
+            intent_source=SignalSource.LLM_ANALYSIS,
+            competitor_mentioned=True,
+            competitors=("Voltrix Systems",),
+            competitor_source=SignalSource.LLM_ANALYSIS,
+            price_objection=True,
+            price_objection_source=SignalSource.LLM_ANALYSIS,
         ),
         S,
     )
@@ -91,9 +99,19 @@ def test_vertex_like_scenario_is_critical_and_fully_explained():
 
 
 def test_score_is_capped_and_deterministic():
-    kw = dict(days_since_rep_contact=30, customer_waiting_days=10, live_quote=True, days_since_quote=30,
-              days_to_quote_expiry=1, overdue_followups=5, competitor_mentioned=True, price_objection=True,
-              intent="high", sentiment="negative", close_date_passed=True)
+    kw = dict(
+        days_since_rep_contact=30,
+        customer_waiting_days=10,
+        live_quote=True,
+        days_since_quote=30,
+        days_to_quote_expiry=1,
+        overdue_followups=5,
+        competitor_mentioned=True,
+        price_objection=True,
+        intent="high",
+        sentiment="negative",
+        close_date_passed=True,
+    )
     a1, a2 = assess(sig(**kw), S), assess(sig(**kw), S)
     assert a1.risk_score == 100 and a1.raw_points > 100
     assert a1 == a2
@@ -135,4 +153,6 @@ def test_probability_uses_stage_calibration_and_intent():
 def test_weighted_revenue_is_value_times_probability():
     a = assess(sig(days_since_rep_contact=15, customer_waiting_days=4, overdue_followups=1), S)
     assert a.risk_level.rank >= RiskLevel.MEDIUM.rank
-    assert a.weighted_revenue_at_risk == (a.revenue_at_risk * Decimal(str(a.purchase_probability))).quantize(Decimal("1"))
+    assert a.weighted_revenue_at_risk == (a.revenue_at_risk * Decimal(str(a.purchase_probability))).quantize(
+        Decimal("1")
+    )

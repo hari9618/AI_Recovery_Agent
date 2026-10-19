@@ -6,6 +6,7 @@ text is extracted without executing anything, and instruction-like content is fl
 
 from __future__ import annotations
 
+import asyncio
 import io
 import logging
 import uuid
@@ -48,9 +49,13 @@ def extract_text(filename: str, data: bytes) -> tuple[str, str]:
     settings = get_settings()
     ext = Path(filename).suffix.lower()
     if ext not in ALLOWED:
-        raise AppError(ErrorCode.UNSUPPORTED_FILE, f"Unsupported file type '{ext}'. Allowed: {', '.join(sorted(ALLOWED))}")
+        raise AppError(
+            ErrorCode.UNSUPPORTED_FILE, f"Unsupported file type '{ext}'. Allowed: {', '.join(sorted(ALLOWED))}"
+        )
     if len(data) > settings.upload_max_bytes:
-        raise AppError(ErrorCode.VALIDATION_FAILED, f"File exceeds {settings.upload_max_bytes // (1024 * 1024)} MB limit")
+        raise AppError(
+            ErrorCode.VALIDATION_FAILED, f"File exceeds {settings.upload_max_bytes // (1024 * 1024)} MB limit"
+        )
     if not data.strip():
         raise AppError(ErrorCode.VALIDATION_FAILED, "File is empty")
     if ext == ".pdf":
@@ -68,7 +73,9 @@ def extract_text(filename: str, data: bytes) -> tuple[str, str]:
         except Exception as exc:  # malformed PDF
             raise AppError(ErrorCode.VALIDATION_FAILED, f"Could not read PDF: {exc.__class__.__name__}") from exc
         if not text.strip():
-            raise AppError(ErrorCode.VALIDATION_FAILED, "PDF contains no extractable text (scanned images are not supported)")
+            raise AppError(
+                ErrorCode.VALIDATION_FAILED, "PDF contains no extractable text (scanned images are not supported)"
+            )
         return text, ALLOWED[ext]
     if b"\x00" in data[:4096]:
         raise AppError(ErrorCode.UNSUPPORTED_FILE, "Binary content in a text file")
@@ -115,18 +122,34 @@ async def ingest_document(
     doc_type = document_type or _coerce_type(meta.get("document_type")) or DocumentType.OTHER
     findings = [f.as_dict() for f in scan_for_injection(body)]
     if mime == "text/markdown":
-        chunks = chunk_markdown(body, title=title, target_chars=settings.rag_chunk_target_chars,
-                                overlap_chars=settings.rag_chunk_overlap_chars)
+        chunks = chunk_markdown(
+            body,
+            title=title,
+            target_chars=settings.rag_chunk_target_chars,
+            overlap_chars=settings.rag_chunk_overlap_chars,
+        )
     else:
-        chunks = chunk_plain(body, title=title, target_chars=settings.rag_chunk_target_chars,
-                             overlap_chars=settings.rag_chunk_overlap_chars)
+        chunks = chunk_plain(
+            body,
+            title=title,
+            target_chars=settings.rag_chunk_target_chars,
+            overlap_chars=settings.rag_chunk_overlap_chars,
+        )
     if not chunks:
         raise AppError(ErrorCode.VALIDATION_FAILED, "Document produced no indexable text")
 
     doc = m.Document(
-        company_id=company_id, knowledge_source_id=source_id, title=title[:255], document_type=doc_type,
-        version=str(meta.get("version", "1.0"))[:40], source=filename, mime_type=mime, content_hash=digest,
-        status=DocumentStatus.PENDING, char_count=len(body), injection_findings=findings,
+        company_id=company_id,
+        knowledge_source_id=source_id,
+        title=title[:255],
+        document_type=doc_type,
+        version=str(meta.get("version", "1.0"))[:40],
+        source=filename,
+        mime_type=mime,
+        content_hash=digest,
+        status=DocumentStatus.PENDING,
+        char_count=len(body),
+        injection_findings=findings,
     )
     session.add(doc)
     await session.flush()
@@ -141,31 +164,54 @@ async def ingest_document(
         chunk_findings = scan_for_injection(chunk.content)
         session.add(
             m.DocumentChunk(
-                company_id=company_id, document_id=doc.id, document_type=doc_type, chunk_index=chunk.index,
-                section=chunk.section[:255], content=chunk.content, char_count=len(chunk.content), embedding=vector,
+                company_id=company_id,
+                document_id=doc.id,
+                document_type=doc_type,
+                chunk_index=chunk.index,
+                section=chunk.section[:255],
+                content=chunk.content,
+                char_count=len(chunk.content),
+                embedding=vector,
                 flagged_injection=bool(chunk_findings),
-                metadata_={"title": title, "version": doc.version, "source": filename,
-                           "effective_date": meta.get("effective_date"), "owner": meta.get("owner")},
+                metadata_={
+                    "title": title,
+                    "version": doc.version,
+                    "source": filename,
+                    "effective_date": meta.get("effective_date"),
+                    "owner": meta.get("owner"),
+                },
             )
         )
     doc.status, doc.chunk_count = DocumentStatus.INDEXED, len(chunks)
     record_audit(
-        session, company_id=company_id, action="knowledge.document_indexed", actor_type=ActorType.USER if actor_id else ActorType.SYSTEM,
-        actor_id=actor_id, entity_type="document", entity_id=doc.id,
+        session,
+        company_id=company_id,
+        action="knowledge.document_indexed",
+        actor_type=ActorType.USER if actor_id else ActorType.SYSTEM,
+        actor_id=actor_id,
+        entity_type="document",
+        entity_id=doc.id,
         output={"title": title, "chunks": len(chunks), "injection_findings": len(findings)},
     )
     await session.flush()
     return IngestResult(doc, False, len(chunks), findings)
 
 
-async def ingest_directory(session: AsyncSession, embedder: Embedder, *, company_id: uuid.UUID, directory: Path) -> list[IngestResult]:
-    source = m.KnowledgeSource(company_id=company_id, name="Seed knowledge base", kind="seed",
-                               description=f"Loaded from {directory.name}/")
+async def ingest_directory(
+    session: AsyncSession, embedder: Embedder, *, company_id: uuid.UUID, directory: Path
+) -> list[IngestResult]:
+    source = m.KnowledgeSource(
+        company_id=company_id, name="Seed knowledge base", kind="seed", description=f"Loaded from {directory.name}/"
+    )
     session.add(source)
     await session.flush()
     results = []
-    for path in sorted(directory.glob("*")):
-        if path.suffix.lower() in ALLOWED:
-            results.append(await ingest_document(session, embedder, company_id=company_id, filename=path.name,
-                                                 data=path.read_bytes(), source_id=source.id))
+    paths = await asyncio.to_thread(lambda: sorted(p for p in directory.glob("*") if p.suffix.lower() in ALLOWED))
+    for path in paths:
+        data = await asyncio.to_thread(path.read_bytes)
+        results.append(
+            await ingest_document(
+                session, embedder, company_id=company_id, filename=path.name, data=data, source_id=source.id
+            )
+        )
     return results

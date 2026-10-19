@@ -29,8 +29,8 @@ from app.observability.tracing import get_tracer
 from app.services.audit import record_audit
 
 logger = logging.getLogger(__name__)
-I = TypeVar("I", bound=BaseModel)  # noqa: E741
-O = TypeVar("O", bound=BaseModel)
+InT = TypeVar("InT", bound=BaseModel)
+OutT = TypeVar("OutT", bound=BaseModel)
 
 
 @dataclass(frozen=True)
@@ -61,7 +61,9 @@ READ_ONLY = Effects()
 class ToolDeps:
     """Lazily-resolved heavy dependencies; tests construct this with doubles."""
 
-    def __init__(self, *, provider: Any = None, embedder: Any = None, reranker: Any = None, use_reranker: bool = True) -> None:
+    def __init__(
+        self, *, provider: Any = None, embedder: Any = None, reranker: Any = None, use_reranker: bool = True
+    ) -> None:
         self._provider, self._embedder, self._reranker, self._use_reranker = provider, embedder, reranker, use_reranker
 
     def llm(self):
@@ -106,13 +108,13 @@ class ToolResult(BaseModel):
 
 
 @dataclass
-class Tool(Generic[I, O]):
+class Tool(Generic[InT, OutT]):
     name: str
     title: str
     description: str
-    input_model: type[I]
-    output_model: type[O]
-    handler: Callable[[ToolContext, I], Awaitable[O]]
+    input_model: type[InT]
+    output_model: type[OutT]
+    handler: Callable[[ToolContext, InT], Awaitable[OutT]]
     effects: Effects = READ_ONLY
     source: str = "postgres"
     untrusted_content: bool = False
@@ -152,22 +154,32 @@ class ToolRegistry:
 
     async def invoke(self, name: str, args: dict[str, Any] | BaseModel, ctx: ToolContext) -> ToolResult:
         tool = self.get(name)
-        provenance = {"source": tool.source, "untrusted_content": tool.untrusted_content, "effects": tool.effects.annotations()}
+        provenance = {
+            "source": tool.source,
+            "untrusted_content": tool.untrusted_content,
+            "effects": tool.effects.annotations(),
+        }
         started = time.perf_counter()
         raw_args = args.model_dump(mode="json") if isinstance(args, BaseModel) else dict(args or {})
-        with get_tracer().observation(f"tool:{name}", as_type="tool", input=raw_args, metadata={"agent": ctx.agent}) as span:
+        with get_tracer().observation(
+            f"tool:{name}", as_type="tool", input=raw_args, metadata={"agent": ctx.agent}
+        ) as span:
             try:
                 try:
                     parsed = args if isinstance(args, tool.input_model) else tool.input_model.model_validate(raw_args)
                 except ValidationError as exc:
-                    raise AppError(ErrorCode.INVALID_REQUEST, f"Invalid arguments for {name}: {_validation_summary(exc)}") from exc
+                    raise AppError(
+                        ErrorCode.INVALID_REQUEST, f"Invalid arguments for {name}: {_validation_summary(exc)}"
+                    ) from exc
                 output = await tool.handler(ctx, parsed)
                 if not isinstance(output, tool.output_model):
                     output = tool.output_model.model_validate(output)
                 data = output.model_dump(mode="json")
                 latency = int((time.perf_counter() - started) * 1000)
                 limitations = data.pop("limitations", None) or []
-                result = ToolResult(ok=True, tool=name, data=data, provenance=provenance, limitations=limitations, latency_ms=latency)
+                result = ToolResult(
+                    ok=True, tool=name, data=data, provenance=provenance, limitations=limitations, latency_ms=latency
+                )
                 span.update(output=_summarize(data))
                 self._audit(ctx, tool, raw_args, data, AuditResult.SUCCESS, latency)
                 return result
@@ -181,13 +193,24 @@ class ToolRegistry:
                 err = AppError(ErrorCode.TOOL_FAILURE, f"{name} failed: {exc.__class__.__name__}")
             latency = int((time.perf_counter() - started) * 1000)
             span.error(err.message)
-            result_kind = AuditResult.BLOCKED if err.code in (ErrorCode.POLICY_BLOCKED, ErrorCode.APPROVAL_REQUIRED, ErrorCode.FORBIDDEN) else AuditResult.FAILURE
+            result_kind = (
+                AuditResult.BLOCKED
+                if err.code in (ErrorCode.POLICY_BLOCKED, ErrorCode.APPROVAL_REQUIRED, ErrorCode.FORBIDDEN)
+                else AuditResult.FAILURE
+            )
             if err.code != ErrorCode.DATABASE_UNAVAILABLE:
                 self._audit(ctx, tool, raw_args, err.to_payload().model_dump(mode="json"), result_kind, latency)
             return ToolResult(ok=False, tool=name, error=err.to_payload(), provenance=provenance, latency_ms=latency)
 
-    def _audit(self, ctx: ToolContext, tool: Tool[Any, Any], args: dict[str, Any], output: dict[str, Any],
-               result: AuditResult, latency: int) -> None:
+    def _audit(
+        self,
+        ctx: ToolContext,
+        tool: Tool[Any, Any],
+        args: dict[str, Any],
+        output: dict[str, Any],
+        result: AuditResult,
+        latency: int,
+    ) -> None:
         if tool.effects.read_only and not ctx.audit_reads and result == AuditResult.SUCCESS:
             return
         customer = args.get("customer_id") or output.get("customer_id")
@@ -196,11 +219,22 @@ class ToolRegistry:
         except ValueError:
             customer_uuid = None
         record_audit(
-            ctx.session, company_id=ctx.company_id, action=f"tool.{tool.name}", actor_type=ctx.actor_type,
-            actor_id=ctx.actor_id, actor_name=ctx.actor_name, agent=ctx.agent, tool=tool.name,
-            entity_type=tool.name.split("_", 1)[-1], entity_id=args.get("opportunity_id") or args.get("recommendation_id"),
-            customer_id=customer_uuid, input=args, output=_summarize(output), result=result,
-            agent_run_id=ctx.agent_run_id, latency_ms=latency,
+            ctx.session,
+            company_id=ctx.company_id,
+            action=f"tool.{tool.name}",
+            actor_type=ctx.actor_type,
+            actor_id=ctx.actor_id,
+            actor_name=ctx.actor_name,
+            agent=ctx.agent,
+            tool=tool.name,
+            entity_type=tool.name.split("_", 1)[-1],
+            entity_id=args.get("opportunity_id") or args.get("recommendation_id"),
+            customer_id=customer_uuid,
+            input=args,
+            output=_summarize(output),
+            result=result,
+            agent_run_id=ctx.agent_run_id,
+            latency_ms=latency,
         )
 
 
@@ -210,6 +244,7 @@ def _validation_summary(exc: ValidationError) -> str:
 
 def _summarize(data: dict[str, Any], limit: int = 1500) -> dict[str, Any]:
     """Keep audit/trace payloads small: truncate long strings and lists."""
+
     def trim(v: Any) -> Any:
         if isinstance(v, str):
             return v if len(v) <= 300 else v[:300] + "…"
@@ -218,6 +253,7 @@ def _summarize(data: dict[str, Any], limit: int = 1500) -> dict[str, Any]:
         if isinstance(v, dict):
             return {k: trim(x) for k, x in list(v.items())[:25]}
         return v
+
     return trim(data)
 
 

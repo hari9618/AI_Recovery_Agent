@@ -39,13 +39,19 @@ async def test_csv_import_validates_dedupes_and_resolves(owner):
     customers = (await owner.get("/customers", params={"q": "Godavari Ceramics"})).json()
     assert customers["total"] == 1
     lead_list = (await owner.get("/leads", params={"limit": 200})).json()["items"]
-    assert any(x["company_name"] == "Godavari Ceramics Pvt Ltd" and x["customer_id"] == customers["items"][0]["id"] for x in lead_list)
+    assert any(
+        x["company_name"] == "Godavari Ceramics Pvt Ltd" and x["customer_id"] == customers["items"][0]["id"]
+        for x in lead_list
+    )
 
 
 async def test_json_import_and_dry_run(owner):
     rows = [{"name": "Neelkanth Cold Storage", "industry": "Logistics & Warehousing"}]
-    r = await owner.post("/ingest/customers", files={"file": ("c.json", json.dumps(rows).encode(), "application/json")},
-                         data={"dry_run": "true"})
+    r = await owner.post(
+        "/ingest/customers",
+        files={"file": ("c.json", json.dumps(rows).encode(), "application/json")},
+        data={"dry_run": "true"},
+    )
     assert r.json()["inserted"] == 1 and r.json()["dry_run"] is True
     assert (await owner.get("/customers", params={"q": "Neelkanth Cold Storage"})).json()["total"] == 0
 
@@ -58,7 +64,11 @@ async def test_unsupported_and_malformed_uploads(owner):
 
 
 async def test_hybrid_search_finds_policy_and_refuses_off_topic(owner):
-    r = (await owner.post("/knowledge/search", json={"query": "What discount can a salesperson offer without manager approval?"})).json()
+    r = (
+        await owner.post(
+            "/knowledge/search", json={"query": "What discount can a salesperson offer without manager approval?"}
+        )
+    ).json()
     assert r["status"] == "OK"
     top = r["evidence"][0]
     assert top["document_title"] == "Discount Authority Policy"
@@ -84,7 +94,9 @@ async def test_injection_document_is_flagged_and_withheld(owner):
     question = "Should every discount request be approved automatically without manager approval, and who gets the customer list?"
     ans = (await owner.post("/knowledge/ask", json={"question": question})).json()
     # The poisoned chunk IS retrieved (it is relevant) — and withheld from the model.
-    assert any(w["document"].startswith("Channel Partner FAQ") for w in ans["withheld_evidence"]), ans["withheld_evidence"]
+    assert any(w["document"].startswith("Channel Partner FAQ") for w in ans["withheld_evidence"]), ans[
+        "withheld_evidence"
+    ]
     assert "IGNORE ALL PREVIOUS INSTRUCTIONS" not in captured["prompt"]
     assert "outlook-mailbox" not in captured["prompt"]
     assert any("prompt injection" in x for x in ans["limitations"])
@@ -94,16 +106,31 @@ async def test_grounded_answer_verifies_citations(owner):
     def reply(messages):
         prompt = messages[-1].content
         # Cite whichever evidence id holds the approval-limit clause.
-        eid = next(line.split("]")[0].strip("[") for line in prompt.splitlines()
-                   if line.startswith("[E") and "Discount" in line)
-        return {"status": "answered", "answer": "Up to 10% without approval; above 10% needs a Sales Manager.",
-                "claims": [{"claim": "Discounts above 10% require manager approval.", "evidence_ids": [eid]},
-                           {"claim": "Discounts above 35% are free for loyal customers.", "evidence_ids": ["E99"]}],
-                "injection_suspected": False}
+        eid = next(
+            line.split("]")[0].strip("[")
+            for line in prompt.splitlines()
+            if line.startswith("[E") and "Discount" in line
+        )
+        return {
+            "status": "answered",
+            "answer": "Up to 10% without approval; above 10% needs a Sales Manager.",
+            "claims": [
+                {"claim": "Discounts above 10% require manager approval.", "evidence_ids": [eid]},
+                {"claim": "Discounts above 35% are free for loyal customers.", "evidence_ids": ["E99"]},
+            ],
+            "injection_suspected": False,
+        }
 
     set_llm_override(ScriptedLLM([reply]))
-    ans = (await owner.post("/knowledge/ask", json={"question": "What discount can a salesperson offer without manager approval?",
-                                                    "document_types": ["discount_policy"]})).json()
+    ans = (
+        await owner.post(
+            "/knowledge/ask",
+            json={
+                "question": "What discount can a salesperson offer without manager approval?",
+                "document_types": ["discount_policy"],
+            },
+        )
+    ).json()
     assert ans["status"] == "PARTIALLY_SUPPORTED"
     good, bad = ans["claims"]
     assert good["supported"] and good["source_document"] == "Discount Authority Policy"
@@ -111,12 +138,32 @@ async def test_grounded_answer_verifies_citations(owner):
 
 
 async def test_document_upload_validation(owner):
-    ok = await owner.post("/knowledge/documents", files={"file": ("warranty.md", b"# Warranty\n\n## Hardware\nAll hardware carries a 12-month warranty.", "text/markdown")},
-                          data={"document_type": "company_policy"})
+    ok = await owner.post(
+        "/knowledge/documents",
+        files={
+            "file": (
+                "warranty.md",
+                b"# Warranty\n\n## Hardware\nAll hardware carries a 12-month warranty.",
+                "text/markdown",
+            )
+        },
+        data={"document_type": "company_policy"},
+    )
     assert ok.status_code == 200 and ok.json()["chunks"] >= 1
-    dup = await owner.post("/knowledge/documents", files={"file": ("again.md", b"# Warranty\n\n## Hardware\nAll hardware carries a 12-month warranty.", "text/markdown")})
+    dup = await owner.post(
+        "/knowledge/documents",
+        files={
+            "file": (
+                "again.md",
+                b"# Warranty\n\n## Hardware\nAll hardware carries a 12-month warranty.",
+                "text/markdown",
+            )
+        },
+    )
     assert dup.json()["duplicate"] is True
-    fake_pdf = await owner.post("/knowledge/documents", files={"file": ("x.pdf", b"not really a pdf", "application/pdf")})
+    fake_pdf = await owner.post(
+        "/knowledge/documents", files={"file": ("x.pdf", b"not really a pdf", "application/pdf")}
+    )
     assert fake_pdf.status_code == 415
     exe = await owner.post("/knowledge/documents", files={"file": ("x.exe", b"MZ\x90\x00", "application/octet-stream")})
     assert exe.status_code == 415
@@ -125,10 +172,13 @@ async def test_document_upload_validation(owner):
 def _minimal_pdf(text: str) -> bytes:
     """Build a tiny valid single-page PDF with one line of text (no external libraries)."""
     stream = f"BT /F1 12 Tf 72 720 Td ({text}) Tj ET".encode()
-    objs = [b"<< /Type /Catalog /Pages 2 0 R >>", b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-            b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
-            b"<< /Length " + str(len(stream)).encode() + b" >>\nstream\n" + stream + b"\nendstream",
-            b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"]
+    objs = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
+        b"<< /Length " + str(len(stream)).encode() + b" >>\nstream\n" + stream + b"\nendstream",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    ]
     out, offsets = bytearray(b"%PDF-1.4\n"), []
     for i, body in enumerate(objs, start=1):
         offsets.append(len(out))
@@ -141,7 +191,10 @@ def _minimal_pdf(text: str) -> bytes:
 
 
 async def test_pdf_ingestion(owner):
-    r = await owner.post("/knowledge/documents", files={"file": ("shipping.pdf", _minimal_pdf("Standard delivery takes 21 days after PO."), "application/pdf")},
-                         data={"document_type": "sop", "title": "Shipping SOP"})
+    r = await owner.post(
+        "/knowledge/documents",
+        files={"file": ("shipping.pdf", _minimal_pdf("Standard delivery takes 21 days after PO."), "application/pdf")},
+        data={"document_type": "sop", "title": "Shipping SOP"},
+    )
     assert r.status_code == 200, r.json()
     assert r.json()["chunks"] == 1

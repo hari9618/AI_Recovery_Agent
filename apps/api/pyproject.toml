@@ -61,9 +61,9 @@ markers = [
 ]
 
 [tool.ruff]
-line-length = 110
+line-length = 120
 target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM", "ASYNC"]
-ignore = ["B008"]
+ignore = ["B008", "E501"]  # line length is owned by `ruff format`

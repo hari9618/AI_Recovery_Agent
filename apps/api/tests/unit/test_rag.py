@@ -38,11 +38,13 @@ def test_tokenize_keeps_policy_tokens():
 
 
 def test_bm25_ranks_exact_policy_clause_first():
-    idx = BM25Index.build({
-        "discount": "Discounts above 10% require manager approval before sharing the quote.",
-        "refund": "Refunds above ₹50,000 require Finance and Owner approval.",
-        "product": "The gateway supports Ethernet, Wi-Fi and 4G connectivity.",
-    })
+    idx = BM25Index.build(
+        {
+            "discount": "Discounts above 10% require manager approval before sharing the quote.",
+            "refund": "Refunds above ₹50,000 require Finance and Owner approval.",
+            "product": "The gateway supports Ethernet, Wi-Fi and 4G connectivity.",
+        }
+    )
     assert idx.search("what discount needs manager approval", 3)[0][0] == "discount"
     assert idx.search("refund ₹50,000", 3)[0][0] == "refund"
     assert idx.search("cricket world cup", 3) == []
@@ -58,7 +60,7 @@ def test_rrf_rewards_agreement_and_is_deterministic():
 
 
 def test_front_matter_and_section_chunking():
-    text = "---\ntitle: Policy\nversion: \"2.0\"\n---\n# Policy\n\n## Limits\nUp to 10% by rep.\n\n## Refunds\nWithin 30 days."
+    text = '---\ntitle: Policy\nversion: "2.0"\n---\n# Policy\n\n## Limits\nUp to 10% by rep.\n\n## Refunds\nWithin 30 days.'
     meta, body = parse_front_matter(text)
     assert meta == {"title": "Policy", "version": "2.0"}
     chunks = chunk_markdown(body, title="Policy")
@@ -97,7 +99,9 @@ def test_untrusted_block_cannot_be_closed_from_inside():
 
 
 def _ev(eid: str, content: str) -> Evidence:
-    return Evidence(eid, eid, "d", "Discount Authority Policy", "discount_policy", "Limits", "3.2", content, False, {"rerank": 0.9})
+    return Evidence(
+        eid, eid, "d", "Discount Authority Policy", "discount_policy", "Limits", "3.2", content, False, {"rerank": 0.9}
+    )
 
 
 async def test_claim_verification_catches_invented_sources_and_numbers():
@@ -120,7 +124,10 @@ async def test_claim_verification_catches_invented_sources_and_numbers():
 async def test_trusted_context_numbers_are_allowed():
     evidence = [_ev("E1", "Discounts above 10% require manager approval.")]
     claims = await verify_claims(
-        BagOfWordsEmbedder(), [("A 12% discount on the ₹4,80,000 quote is above 10% and requires manager approval.", ["E1"])],
-        evidence, min_support=0.3, trusted_context="deal value ₹4,80,000; requested discount 12%",
+        BagOfWordsEmbedder(),
+        [("A 12% discount on the ₹4,80,000 quote is above 10% and requires manager approval.", ["E1"])],
+        evidence,
+        min_support=0.3,
+        trusted_context="deal value ₹4,80,000; requested discount 12%",
     )
     assert claims[0].supported, claims[0].problems

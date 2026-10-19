@@ -22,7 +22,9 @@ async def get_company_settings(session: AsyncSession, company_id: uuid.UUID) -> 
     return CompanySettings.from_json((await get_company(session, company_id)).settings)
 
 
-async def update_company_settings(session: AsyncSession, company_id: uuid.UUID, settings: CompanySettings) -> CompanySettings:
+async def update_company_settings(
+    session: AsyncSession, company_id: uuid.UUID, settings: CompanySettings
+) -> CompanySettings:
     company = await get_company(session, company_id)
     company.settings = settings.model_dump(mode="json")
     await session.flush()

@@ -32,15 +32,28 @@ def scripted_analysis(spec: dict[str, Any], customer_message: str) -> dict[str, 
     msg = customer_message.lower()
     objections = []
     if "price" in msg or "budget" in msg:
-        quote = next((s for s in re.split(r"(?<=[.?!])\s+", customer_message) if "price" in s.lower() or "budget" in s.lower()), customer_message)
+        quote = next(
+            (s for s in re.split(r"(?<=[.?!])\s+", customer_message) if "price" in s.lower() or "budget" in s.lower()),
+            customer_message,
+        )
         objections.append({"type": "price", "detail": "Customer wants a lower price", "quote": quote.strip()})
-    competitors = [{"name": "Voltrix Systems", "context": "quoted lower for a similar scope"}] if "voltrix" in msg else []
+    competitors = (
+        [{"name": "Voltrix Systems", "context": "quoted lower for a similar scope"}] if "voltrix" in msg else []
+    )
     return {
-        "intent": "high" if objections or "?" in msg else "medium", "buying_stage": "decision", "urgency": "medium",
-        "budget_signal": "constrained" if objections else "unknown", "objections": objections, "competitor_mentions": competitors,
-        "decision_maker_status": "engaged", "customer_waiting_on": "an answer" if "?" in msg else None,
-        "next_action": "follow_up", "sentiment": "neutral", "summary": "Customer is evaluating the proposal. Scripted offline analysis.",
-        "evidence_quotes": [customer_message.split(".")[0].strip()], "confidence": 0.85,
+        "intent": "high" if objections or "?" in msg else "medium",
+        "buying_stage": "decision",
+        "urgency": "medium",
+        "budget_signal": "constrained" if objections else "unknown",
+        "objections": objections,
+        "competitor_mentions": competitors,
+        "decision_maker_status": "engaged",
+        "customer_waiting_on": "an answer" if "?" in msg else None,
+        "next_action": "follow_up",
+        "sentiment": "neutral",
+        "summary": "Customer is evaluating the proposal. Scripted offline analysis.",
+        "evidence_quotes": [customer_message.split(".")[0].strip()],
+        "confidence": 0.85,
     }
 
 
@@ -59,18 +72,32 @@ def scripted_recommendation(spec: dict[str, Any]):
         action, discount = spec["action"], spec["discount"]
         body = None
         if spec["email"] and action in ("send_email", "offer_discount", "create_followup"):
-            offer = f" We can offer {discount:g}% off the current quotation." if action == "offer_discount" and discount else ""
+            offer = (
+                f" We can offer {discount:g}% off the current quotation."
+                if action == "offer_discount" and discount
+                else ""
+            )
             invented = " The revised price is ₹3,99,999 if you confirm today." if spec["invented_number"] else ""
-            body = (f"Hi Ritu,\n\nThank you for your message.{offer}{invented} Could we speak tomorrow at 11 am to finalise next steps?"
-                    "\n\nBest regards,\nEval Rep\nArcline Systems")
+            body = (
+                f"Hi Ritu,\n\nThank you for your message.{offer}{invented} Could we speak tomorrow at 11 am to finalise next steps?"
+                "\n\nBest regards,\nEval Rep\nArcline Systems"
+            )
         return {
-            "title": "Follow up today with a clear next step", "what_happened": "Quotation sent; customer replied with a question.",
-            "why_risky": "Customer is waiting and the deal is late-stage.", "recommendation": "Respond today with a concrete next step.",
-            "primary_action": action, "proposed_discount_pct": discount if action == "offer_discount" else None,
-            "email_subject": "Next steps on your quotation" if body else None, "email_body": body,
-            "followup_title": "Call customer about the quotation", "followup_due_in_hours": 8,
-            "expected_outcome": "Customer gets an answer and a next step.", "policy_claims": claims, "cited_evidence_ids": cited,
-            "confidence": spec["confidence"], "injection_suspected": spec["injection"],
+            "title": "Follow up today with a clear next step",
+            "what_happened": "Quotation sent; customer replied with a question.",
+            "why_risky": "Customer is waiting and the deal is late-stage.",
+            "recommendation": "Respond today with a concrete next step.",
+            "primary_action": action,
+            "proposed_discount_pct": discount if action == "offer_discount" else None,
+            "email_subject": "Next steps on your quotation" if body else None,
+            "email_body": body,
+            "followup_title": "Call customer about the quotation",
+            "followup_due_in_hours": 8,
+            "expected_outcome": "Customer gets an answer and a next step.",
+            "policy_claims": claims,
+            "cited_evidence_ids": cited,
+            "confidence": spec["confidence"],
+            "injection_suspected": spec["injection"],
         }
 
     return reply
@@ -88,9 +115,16 @@ class FaultInjectingProvider(LLMProvider):
     def model(self) -> str:
         return self.inner.model
 
-    async def complete(self, messages: list[ChatMessage], *, purpose: str, response_model: type[BaseModel] | None = None,
-                       tools: list[ToolDefinition] | None = None, temperature: float | None = None,
-                       max_tokens: int | None = None) -> LLMResponse:
+    async def complete(
+        self,
+        messages: list[ChatMessage],
+        *,
+        purpose: str,
+        response_model: type[BaseModel] | None = None,
+        tools: list[ToolDefinition] | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+    ) -> LLMResponse:
         fault = self.faults.get(purpose)
         if fault == "timeout":
             raise LLMError(ErrorCode.LLM_TIMEOUT, f"injected timeout ({purpose})")
@@ -98,8 +132,14 @@ class FaultInjectingProvider(LLMProvider):
             from app.llm.base import LLMUsage  # noqa: PLC0415
 
             return LLMResponse(content=self._garbage[purpose].pop(0), model=self.model, usage=LLMUsage())
-        return await self.inner.complete(messages, purpose=purpose, response_model=response_model, tools=tools,
-                                         temperature=temperature, max_tokens=max_tokens)
+        return await self.inner.complete(
+            messages,
+            purpose=purpose,
+            response_model=response_model,
+            tools=tools,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
 
 
 def provider_for(spec: dict[str, Any], customer_message: str, *, live_provider: LLMProvider | None) -> LLMProvider:
@@ -119,7 +159,9 @@ def provider_for(spec: dict[str, Any], customer_message: str, *, live_provider: 
             return list(GARBAGE)
         return [ok_reply]
 
-    return ScriptedLLM(by_purpose={
-        "conversation_analysis": plan("analysis", scripted_analysis(spec, customer_message)) * 2,
-        "recommendation": plan("recommendation", scripted_recommendation(spec)),
-    })
+    return ScriptedLLM(
+        by_purpose={
+            "conversation_analysis": plan("analysis", scripted_analysis(spec, customer_message)) * 2,
+            "recommendation": plan("recommendation", scripted_recommendation(spec)),
+        }
+    )

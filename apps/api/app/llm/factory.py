@@ -8,7 +8,6 @@ from app.core.config import get_settings
 from app.core.errors import ErrorCode, LLMError
 from app.llm.base import LLMProvider
 
-
 _override: LLMProvider | None = None
 
 

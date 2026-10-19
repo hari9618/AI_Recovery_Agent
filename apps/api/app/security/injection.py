@@ -20,12 +20,38 @@ import re
 from dataclasses import dataclass
 
 _PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
-    ("override_instructions", re.compile(r"\b(ignore|disregard|forget)\b.{0,40}\b(previous|prior|above|all)\b.{0,20}\b(instructions?|rules|prompts?)\b", re.I | re.S)),
-    ("role_hijack", re.compile(r"\byou are now\b|\bact as (?:an?|the) (?:system|admin|developer)\b|\bnew (?:system )?instructions?\b", re.I)),
+    (
+        "override_instructions",
+        re.compile(
+            r"\b(ignore|disregard|forget)\b.{0,40}\b(previous|prior|above|all)\b.{0,20}\b(instructions?|rules|prompts?)\b",
+            re.I | re.S,
+        ),
+    ),
+    (
+        "role_hijack",
+        re.compile(
+            r"\byou are now\b|\bact as (?:an?|the) (?:system|admin|developer)\b|\bnew (?:system )?instructions?\b", re.I
+        ),
+    ),
     ("mode_switch", re.compile(r"\b(maintenance|developer|debug|god|jailbreak|DAN) mode\b", re.I)),
-    ("system_prompt_probe", re.compile(r"\b(reveal|print|show|repeat)\b.{0,30}\b(system prompt|instructions|api key|secret)s?\b", re.I)),
-    ("approval_bypass", re.compile(r"\b(approve|grant)\b.{0,40}\b(automatically|without (?:manager |any )?approval)\b|\bdo not ask for (?:manager )?approval\b", re.I)),
-    ("data_exfiltration", re.compile(r"\b(send|email|forward|upload|export)\b.{0,60}\b(customer (?:list|data)|all customers|email addresses|deal values|database|credentials)\b", re.I | re.S)),
+    (
+        "system_prompt_probe",
+        re.compile(r"\b(reveal|print|show|repeat)\b.{0,30}\b(system prompt|instructions|api key|secret)s?\b", re.I),
+    ),
+    (
+        "approval_bypass",
+        re.compile(
+            r"\b(approve|grant)\b.{0,40}\b(automatically|without (?:manager |any )?approval)\b|\bdo not ask for (?:manager )?approval\b",
+            re.I,
+        ),
+    ),
+    (
+        "data_exfiltration",
+        re.compile(
+            r"\b(send|email|forward|upload|export)\b.{0,60}\b(customer (?:list|data)|all customers|email addresses|deal values|database|credentials)\b",
+            re.I | re.S,
+        ),
+    ),
     ("delimiter_spoof", re.compile(r"</?\s*(untrusted|system|evidence|instructions)[\w\s-]*>", re.I)),
 )
 

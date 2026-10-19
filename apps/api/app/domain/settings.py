@@ -23,10 +23,18 @@ class DayBand(BaseModel):
 
 class RiskWeights(BaseModel):
     no_contact: list[DayBand] = Field(
-        default_factory=lambda: [DayBand(min_days=14, points=25), DayBand(min_days=7, points=18), DayBand(min_days=4, points=10)]
+        default_factory=lambda: [
+            DayBand(min_days=14, points=25),
+            DayBand(min_days=7, points=18),
+            DayBand(min_days=4, points=10),
+        ]
     )
     quote_unanswered: list[DayBand] = Field(
-        default_factory=lambda: [DayBand(min_days=10, points=15), DayBand(min_days=5, points=10), DayBand(min_days=3, points=6)]
+        default_factory=lambda: [
+            DayBand(min_days=10, points=15),
+            DayBand(min_days=5, points=10),
+            DayBand(min_days=3, points=6),
+        ]
     )
     customer_awaiting_reply: list[DayBand] = Field(
         default_factory=lambda: [DayBand(min_days=3, points=20), DayBand(min_days=1, points=15)]

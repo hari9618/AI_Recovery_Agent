@@ -12,8 +12,21 @@ from typing import Any
 
 from pydantic import BaseModel
 
-_DROP_KEYS = {"title", "default", "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "format",
-              "minLength", "maxLength", "pattern", "minItems", "maxItems", "examples"}
+_DROP_KEYS = {
+    "title",
+    "default",
+    "minimum",
+    "maximum",
+    "exclusiveMinimum",
+    "exclusiveMaximum",
+    "format",
+    "minLength",
+    "maxLength",
+    "pattern",
+    "minItems",
+    "maxItems",
+    "examples",
+}
 
 
 def _inline_refs(node: Any, defs: dict[str, Any]) -> Any:

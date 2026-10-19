@@ -42,7 +42,17 @@ async def test_vertex_is_critical_with_explained_reasons(owner, demo):
 async def test_customer_profile_has_all_sections(owner, demo):
     cid = demo["scenario"]["customer_id"]
     p = (await owner.get(f"/customers/{cid}")).json()
-    for key in ("customer", "summary", "contacts", "opportunities", "quotes", "conversations", "risks", "timeline", "audit"):
+    for key in (
+        "customer",
+        "summary",
+        "contacts",
+        "opportunities",
+        "quotes",
+        "conversations",
+        "risks",
+        "timeline",
+        "audit",
+    ):
         assert key in p
     s = p["summary"]
     assert s["revenue_risk"] == "critical" and s["main_objection"] == "price" and s["competitor_mentioned"]
@@ -99,5 +109,7 @@ async def test_validation_errors_use_error_contract(owner):
 async def test_llm_features_degrade_gracefully_without_llm(owner, demo):
     r = await owner.post(f"/conversations/{demo['scenario']['conversation_id']}/analyze")
     assert r.status_code == 503 and r.json()["error"]["code"] == "llm_not_configured"
-    ask = (await owner.post("/knowledge/ask", json={"question": "What discount can a rep give without approval?"})).json()
+    ask = (
+        await owner.post("/knowledge/ask", json={"question": "What discount can a rep give without approval?"})
+    ).json()
     assert ask["status"] == "LLM_FALLBACK" and ask["evidence"]

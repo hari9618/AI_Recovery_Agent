@@ -143,7 +143,10 @@ def purchase_probability(signals: RiskSignals, settings: CompanySettings) -> tup
     model = settings.probability
     base = model.stage_base.get(signals.stage, 0.0)
     calibration = 1.0
-    if signals.historical_win_rate is not None and signals.historical_sample_size >= model.min_closed_deals_for_calibration:
+    if (
+        signals.historical_win_rate is not None
+        and signals.historical_sample_size >= model.min_closed_deals_for_calibration
+    ):
         low, high = model.calibration_bounds
         calibration = min(max(signals.historical_win_rate / model.reference_win_rate, low), high)
     intent_mult = model.intent_multiplier.get(signals.intent, 1.0)
@@ -166,38 +169,79 @@ def _collect_reasons(s: RiskSignals, settings: CompanySettings) -> list[Reason]:
             reasons.append(Reason(code, label, points, source, evidence))
 
     if s.customer_waiting_days is not None:
-        add(ReasonCode.CUSTOMER_AWAITING_REPLY, f"Customer has been waiting {_days(s.customer_waiting_days)} for a reply",
-            _band_points(s.customer_waiting_days, w.customer_awaiting_reply), SignalSource.CRM_DATA,
-            waiting_days=round(s.customer_waiting_days, 1))
+        add(
+            ReasonCode.CUSTOMER_AWAITING_REPLY,
+            f"Customer has been waiting {_days(s.customer_waiting_days)} for a reply",
+            _band_points(s.customer_waiting_days, w.customer_awaiting_reply),
+            SignalSource.CRM_DATA,
+            waiting_days=round(s.customer_waiting_days, 1),
+        )
     if s.days_since_rep_contact is not None:
-        add(ReasonCode.NO_RECENT_CONTACT, f"No follow-up from the sales team for {_days(s.days_since_rep_contact)}",
-            _band_points(s.days_since_rep_contact, w.no_contact), SignalSource.CRM_DATA,
-            days_since_contact=round(s.days_since_rep_contact, 1))
+        add(
+            ReasonCode.NO_RECENT_CONTACT,
+            f"No follow-up from the sales team for {_days(s.days_since_rep_contact)}",
+            _band_points(s.days_since_rep_contact, w.no_contact),
+            SignalSource.CRM_DATA,
+            days_since_contact=round(s.days_since_rep_contact, 1),
+        )
     if s.live_quote and s.days_since_quote is not None:
-        add(ReasonCode.QUOTE_UNANSWERED, f"Quotation sent {_days(s.days_since_quote)} ago without a decision",
-            _band_points(s.days_since_quote, w.quote_unanswered), SignalSource.CRM_DATA,
-            days_since_quote=round(s.days_since_quote, 1))
+        add(
+            ReasonCode.QUOTE_UNANSWERED,
+            f"Quotation sent {_days(s.days_since_quote)} ago without a decision",
+            _band_points(s.days_since_quote, w.quote_unanswered),
+            SignalSource.CRM_DATA,
+            days_since_quote=round(s.days_since_quote, 1),
+        )
     if s.days_to_quote_expiry is not None:
         if s.days_to_quote_expiry < 0:
-            add(ReasonCode.QUOTE_EXPIRED, f"Quotation expired {_days(-s.days_to_quote_expiry)} ago", w.quote_expired,
-                SignalSource.CRM_DATA, days_since_expiry=round(-s.days_to_quote_expiry, 1))
+            add(
+                ReasonCode.QUOTE_EXPIRED,
+                f"Quotation expired {_days(-s.days_to_quote_expiry)} ago",
+                w.quote_expired,
+                SignalSource.CRM_DATA,
+                days_since_expiry=round(-s.days_to_quote_expiry, 1),
+            )
         elif s.live_quote and s.days_to_quote_expiry <= w.quote_expiring_within_days:
-            add(ReasonCode.QUOTE_EXPIRING, f"Quotation expires in {_days(s.days_to_quote_expiry)}", w.quote_expiring,
-                SignalSource.CRM_DATA, days_to_expiry=round(s.days_to_quote_expiry, 1))
+            add(
+                ReasonCode.QUOTE_EXPIRING,
+                f"Quotation expires in {_days(s.days_to_quote_expiry)}",
+                w.quote_expiring,
+                SignalSource.CRM_DATA,
+                days_to_expiry=round(s.days_to_quote_expiry, 1),
+            )
     if s.overdue_followups > 0:
-        points = min(w.overdue_followup + w.overdue_followup_additional * (s.overdue_followups - 1), w.overdue_followup_cap)
+        points = min(
+            w.overdue_followup + w.overdue_followup_additional * (s.overdue_followups - 1), w.overdue_followup_cap
+        )
         plural = "s" if s.overdue_followups > 1 else ""
-        add(ReasonCode.OVERDUE_FOLLOWUP, f"{s.overdue_followups} overdue follow-up task{plural}", points,
-            SignalSource.CRM_DATA, overdue_count=s.overdue_followups)
+        add(
+            ReasonCode.OVERDUE_FOLLOWUP,
+            f"{s.overdue_followups} overdue follow-up task{plural}",
+            points,
+            SignalSource.CRM_DATA,
+            overdue_count=s.overdue_followups,
+        )
     if s.competitor_mentioned:
         names = f" ({', '.join(s.competitors)})" if s.competitors else ""
-        add(ReasonCode.COMPETITOR_MENTIONED, f"Customer mentioned a competitor{names}", w.competitor_mentioned,
-            s.competitor_source, competitors=list(s.competitors))
+        add(
+            ReasonCode.COMPETITOR_MENTIONED,
+            f"Customer mentioned a competitor{names}",
+            w.competitor_mentioned,
+            s.competitor_source,
+            competitors=list(s.competitors),
+        )
     if s.price_objection:
-        add(ReasonCode.PRICE_OBJECTION, "Customer raised a price objection", w.price_objection, s.price_objection_source)
+        add(
+            ReasonCode.PRICE_OBJECTION, "Customer raised a price objection", w.price_objection, s.price_objection_source
+        )
     if s.intent == "high" and (s.days_since_rep_contact or 0) >= w.high_intent_stalled_min_days:
-        add(ReasonCode.HIGH_INTENT_STALLED, "High buying intent, but the deal has stalled", w.high_intent_stalled,
-            s.intent_source, intent=s.intent)
+        add(
+            ReasonCode.HIGH_INTENT_STALLED,
+            "High buying intent, but the deal has stalled",
+            w.high_intent_stalled,
+            s.intent_source,
+            intent=s.intent,
+        )
     if s.intent == "low":
         add(ReasonCode.LOW_INTENT, "Customer shows low buying intent", w.low_intent, s.intent_source, intent=s.intent)
     if s.sentiment == "negative":
@@ -206,8 +250,13 @@ def _collect_reasons(s: RiskSignals, settings: CompanySettings) -> list[Reason]:
         add(ReasonCode.CLOSE_DATE_PASSED, "Expected close date has passed", w.close_date_passed, SignalSource.CRM_DATA)
     # Late stage only amplifies a deal that already shows at least one risk reason.
     if reasons and s.stage in (OpportunityStage.PROPOSAL, OpportunityStage.NEGOTIATION):
-        add(ReasonCode.LATE_STAGE, f"Late-stage deal ({s.stage.value}) — more revenue is close to being lost",
-            w.late_stage, SignalSource.CRM_DATA, stage=s.stage.value)
+        add(
+            ReasonCode.LATE_STAGE,
+            f"Late-stage deal ({s.stage.value}) — more revenue is close to being lost",
+            w.late_stage,
+            SignalSource.CRM_DATA,
+            stage=s.stage.value,
+        )
     return reasons
 
 
@@ -234,7 +283,9 @@ def assess(signals: RiskSignals, settings: CompanySettings) -> RiskAssessment:
     at_risk = signals.deal_value if level.rank >= RiskLevel.MEDIUM.rank else Decimal("0")
     weighted = (at_risk * Decimal(str(probability))).quantize(Decimal("1"))
     present = {r.code for r in reasons}
-    next_step = next((step for code, step in NEXT_STEP_PRIORITY if code in present), "No action needed — keep the normal cadence")
+    next_step = next(
+        (step for code, step in NEXT_STEP_PRIORITY if code in present), "No action needed — keep the normal cadence"
+    )
     return RiskAssessment(
         risk_score=score,
         risk_level=level,

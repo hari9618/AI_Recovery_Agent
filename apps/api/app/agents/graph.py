@@ -38,8 +38,18 @@ def _after_persist(state: RevenueRecoveryState) -> str:
 @lru_cache
 def investigation_graph():
     g = StateGraph(RevenueRecoveryState)
-    for name in ("load_context", "analyze_conversation", "assess_risk", "retrieve_knowledge", "recommend",
-                 "ground_check", "policy_check", "persist_recommendation", "execute_action", "verify"):
+    for name in (
+        "load_context",
+        "analyze_conversation",
+        "assess_risk",
+        "retrieve_knowledge",
+        "recommend",
+        "ground_check",
+        "policy_check",
+        "persist_recommendation",
+        "execute_action",
+        "verify",
+    ):
         g.add_node(name, getattr(nodes, name))
     g.add_edge(START, "load_context")
     g.add_conditional_edges("load_context", _after_load, ["analyze_conversation", END])

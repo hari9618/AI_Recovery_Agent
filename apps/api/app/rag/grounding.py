@@ -65,10 +65,15 @@ class GroundedAnswer:
 
     def as_dict(self) -> dict[str, Any]:
         return {
-            "question": self.question, "status": self.status, "answer": self.answer,
-            "claims": [c.as_dict() for c in self.claims], "grounding_score": round(self.grounding_score, 4),
-            "evidence": [e.as_dict() for e in self.evidence], "withheld_evidence": self.withheld_evidence,
-            "limitations": self.limitations, "model": self.model,
+            "question": self.question,
+            "status": self.status,
+            "answer": self.answer,
+            "claims": [c.as_dict() for c in self.claims],
+            "grounding_score": round(self.grounding_score, 4),
+            "evidence": [e.as_dict() for e in self.evidence],
+            "withheld_evidence": self.withheld_evidence,
+            "limitations": self.limitations,
+            "model": self.model,
             "retrieval": self.retrieval.as_dict() if self.retrieval else None,
         }
 
@@ -83,9 +88,15 @@ def format_evidence(evidence: list[Evidence]) -> str:
     )
 
 
-async def verify_claims(embedder: Embedder, claims: list[tuple[str, list[str]]], evidence: list[Evidence],
-                        min_support: float, trusted_context: str = "", reranker: Reranker | None = None,
-                        min_support_xenc: float = 0.5) -> list[VerifiedClaim]:
+async def verify_claims(
+    embedder: Embedder,
+    claims: list[tuple[str, list[str]]],
+    evidence: list[Evidence],
+    min_support: float,
+    trusted_context: str = "",
+    reranker: Reranker | None = None,
+    min_support_xenc: float = 0.5,
+) -> list[VerifiedClaim]:
     """Check each claim against the passages it cites.
 
     Support is the cross-encoder relevance of (claim, cited passage) when a reranker is available — it separates
@@ -99,7 +110,7 @@ async def verify_claims(embedder: Embedder, claims: list[tuple[str, list[str]]],
     if reranker is None and claims:
         vectors = await embedder.aembed_documents([c for c, _ in claims] + [e.content for e in evidence])
         claim_vecs = vectors[: len(claims)]
-        ev_vecs = dict(zip([e.evidence_id for e in evidence], vectors[len(claims):], strict=True))
+        ev_vecs = dict(zip([e.evidence_id for e in evidence], vectors[len(claims) :], strict=True))
     out: list[VerifiedClaim] = []
     for n, (claim, ids) in enumerate(claims):
         problems: list[str] = []
@@ -123,8 +134,18 @@ async def verify_claims(embedder: Embedder, claims: list[tuple[str, list[str]]],
         if support < threshold:
             problems.append(f"cited passage does not support the claim (score {support:.2f} < {threshold})")
         ev = by_id[best]
-        out.append(VerifiedClaim(claim, not problems, ev.evidence_id, ev.document_title, ev.section,
-                                 round(ev.retrieval_score, 4), support, problems))
+        out.append(
+            VerifiedClaim(
+                claim,
+                not problems,
+                ev.evidence_id,
+                ev.document_title,
+                ev.section,
+                round(ev.retrieval_score, 4),
+                support,
+                problems,
+            )
+        )
     return out
 
 
@@ -142,50 +163,115 @@ async def answer_with_citations(
     settings = get_settings()
     retrieval = retrieval or await retriever.search(session, company_id=company_id, query=question, doc_types=doc_types)
     usable = [e for e in retrieval.evidence if not (settings.rag_exclude_flagged_from_llm and e.flagged_injection)]
-    withheld = [{"evidence_id": e.evidence_id, "document": e.document_title, "section": e.section,
-                 "reason": "contains instruction-like text (possible prompt injection)"}
-                for e in retrieval.evidence if e not in usable]
+    withheld = [
+        {
+            "evidence_id": e.evidence_id,
+            "document": e.document_title,
+            "section": e.section,
+            "reason": "contains instruction-like text (possible prompt injection)",
+        }
+        for e in retrieval.evidence
+        if e not in usable
+    ]
     limitations = [f"{len(withheld)} passage(s) withheld from the model: possible prompt injection"] if withheld else []
 
     if not usable:
-        return GroundedAnswer(question, "INSUFFICIENT_EVIDENCE", "", [], [], withheld,
-                              limitations + ["No knowledge passage was relevant enough to answer."], retrieval=retrieval)
+        return GroundedAnswer(
+            question,
+            "INSUFFICIENT_EVIDENCE",
+            "",
+            [],
+            [],
+            withheld,
+            limitations + ["No knowledge passage was relevant enough to answer."],
+            retrieval=retrieval,
+        )
     if provider is None:
-        return GroundedAnswer(question, "LLM_FALLBACK", "", [], usable, withheld,
-                              limitations + ["LLM not configured: showing retrieved evidence only."], retrieval=retrieval)
+        return GroundedAnswer(
+            question,
+            "LLM_FALLBACK",
+            "",
+            [],
+            usable,
+            withheld,
+            limitations + ["LLM not configured: showing retrieved evidence only."],
+            retrieval=retrieval,
+        )
 
     with get_tracer().observation("grounded_answer", as_type="chain", input={"question": question}) as span:
         try:
-            result = await generate_structured(provider, build_messages(question, format_evidence(usable), business_context),
-                                               LLMGroundedAnswer, purpose="grounded_answer", temperature=0.0)
+            result = await generate_structured(
+                provider,
+                build_messages(question, format_evidence(usable), business_context),
+                LLMGroundedAnswer,
+                purpose="grounded_answer",
+                temperature=0.0,
+            )
         except LLMError as exc:  # timeout / rate limit / outage: degrade to evidence-only, never fail the request
             span.update(output={"status": "LLM_FALLBACK", "error": exc.code.value}, level="WARNING")
-            return GroundedAnswer(question, "LLM_FALLBACK", "", [], usable, withheld,
-                                  limitations + [f"LLM unavailable ({exc.code.value}); showing retrieved evidence only."],
-                                  retrieval=retrieval)
+            return GroundedAnswer(
+                question,
+                "LLM_FALLBACK",
+                "",
+                [],
+                usable,
+                withheld,
+                limitations + [f"LLM unavailable ({exc.code.value}); showing retrieved evidence only."],
+                retrieval=retrieval,
+            )
         if not result.ok or result.value is None:
             span.update(output={"status": "LLM_FALLBACK"}, level="WARNING")
-            return GroundedAnswer(question, "LLM_FALLBACK", "", [], usable, withheld,
-                                  limitations + ["The model's answer failed validation; showing evidence only."],
-                                  result.model, result.usage, retrieval)
+            return GroundedAnswer(
+                question,
+                "LLM_FALLBACK",
+                "",
+                [],
+                usable,
+                withheld,
+                limitations + ["The model's answer failed validation; showing evidence only."],
+                result.model,
+                result.usage,
+                retrieval,
+            )
         draft = result.value
         if draft.injection_suspected:
             limitations.append("The model reported instruction-like text in the evidence and ignored it.")
         if draft.status == "insufficient_evidence" or not draft.claims:
             span.update(output={"status": "INSUFFICIENT_EVIDENCE"})
-            return GroundedAnswer(question, "INSUFFICIENT_EVIDENCE", "", [], usable, withheld,
-                                  limitations + ["The passages do not answer this question."], result.model, result.usage, retrieval)
-        claims = await verify_claims(retriever.embedder, [(c.claim, c.evidence_ids) for c in draft.claims], usable,
-                                     settings.rag_min_claim_support, business_context or "", retriever.reranker,
-                                     settings.rag_min_claim_support_xenc)
+            return GroundedAnswer(
+                question,
+                "INSUFFICIENT_EVIDENCE",
+                "",
+                [],
+                usable,
+                withheld,
+                limitations + ["The passages do not answer this question."],
+                result.model,
+                result.usage,
+                retrieval,
+            )
+        claims = await verify_claims(
+            retriever.embedder,
+            [(c.claim, c.evidence_ids) for c in draft.claims],
+            usable,
+            settings.rag_min_claim_support,
+            business_context or "",
+            retriever.reranker,
+            settings.rag_min_claim_support_xenc,
+        )
         supported = [c for c in claims if c.supported]
         status: GroundedStatus = (
-            "INSUFFICIENT_EVIDENCE" if not supported else "ANSWERED" if len(supported) == len(claims) else "PARTIALLY_SUPPORTED"
+            "INSUFFICIENT_EVIDENCE"
+            if not supported
+            else "ANSWERED"
+            if len(supported) == len(claims)
+            else "PARTIALLY_SUPPORTED"
         )
         if status == "PARTIALLY_SUPPORTED":
             limitations.append(f"{len(claims) - len(supported)} claim(s) could not be verified against the sources.")
         answer = draft.answer if status != "INSUFFICIENT_EVIDENCE" else ""
         span.update(output={"status": status, "claims": len(claims), "supported": len(supported)})
         span.score("grounding_score", len(supported) / len(claims))
-        return GroundedAnswer(question, status, answer, claims, usable, withheld, limitations, result.model,
-                              result.usage, retrieval)
+        return GroundedAnswer(
+            question, status, answer, claims, usable, withheld, limitations, result.model, result.usage, retrieval
+        )

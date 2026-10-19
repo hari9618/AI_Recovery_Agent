@@ -7,8 +7,13 @@ from app.tools import REGISTRY
 
 TOOLS = REGISTRY.all()
 REQUIRED_MCP = {
-    "revenue.get_at_risk_opportunities", "revenue.get_customer_intelligence", "revenue.search_knowledge",
-    "revenue.calculate_risk", "revenue.create_followup", "revenue.request_approval", "revenue.get_recovery_report",
+    "revenue.get_at_risk_opportunities",
+    "revenue.get_customer_intelligence",
+    "revenue.search_knowledge",
+    "revenue.calculate_risk",
+    "revenue.create_followup",
+    "revenue.request_approval",
+    "revenue.get_recovery_report",
 }
 
 

@@ -45,11 +45,19 @@ def _args_ok(calls: list[dict[str, Any]], checks: dict[str, dict[str, str]]) -> 
     return True
 
 
-async def run_case(case: dict[str, Any], principal: Principal, provider: LLMProvider, company_id: uuid.UUID) -> dict[str, Any]:
+async def run_case(
+    case: dict[str, Any], principal: Principal, provider: LLMProvider, company_id: uuid.UUID
+) -> dict[str, Any]:
     started = time.perf_counter()
     async with get_sessionmaker()() as s:
-        out = await ask_copilot(s, provider, company_id=company_id, actor_id=str(principal.user_id), actor_name="eval",
-                                question=case["question"])
+        out = await ask_copilot(
+            s,
+            provider,
+            company_id=company_id,
+            actor_id=str(principal.user_id),
+            actor_name="eval",
+            question=case["question"],
+        )
         await s.rollback()
     calls = out["tool_calls"]
     called = {c["tool"] for c in calls if c.get("ok")}
@@ -66,6 +74,13 @@ async def run_case(case: dict[str, Any], principal: Principal, provider: LLMProv
         scores["tool_argument_accuracy"] = _args_ok(calls, case["arg_checks"])
     if case.get("answer_mentions"):
         scores["answer_contains"] = all(x.lower() in out["answer"].lower() for x in case["answer_mentions"])
-    return {"case_key": case["key"], "description": case["question"], "tags": case["tags"], "passed": all(scores.values()),
-            "scores": scores, "latency_ms": int((time.perf_counter() - started) * 1000),
-            "output": {"answer": out["answer"], "tool_calls": calls, "trace_id": out["trace_id"]}, "expected": case}
+    return {
+        "case_key": case["key"],
+        "description": case["question"],
+        "tags": case["tags"],
+        "passed": all(scores.values()),
+        "scores": scores,
+        "latency_ms": int((time.perf_counter() - started) * 1000),
+        "output": {"answer": out["answer"], "tool_calls": calls, "trace_id": out["trace_id"]},
+        "expected": case,
+    }

@@ -27,7 +27,8 @@ class LLMCallContext:
     trace_id: str | None = None
 
 
-_ctx: contextvars.ContextVar[LLMCallContext] = contextvars.ContextVar("llm_call_context", default=LLMCallContext())
+_DEFAULT_CONTEXT = LLMCallContext()  # frozen dataclass: safe as a shared default
+_ctx: contextvars.ContextVar[LLMCallContext] = contextvars.ContextVar("llm_call_context", default=_DEFAULT_CONTEXT)
 # Tests and offline evaluation can disable persistence.
 _enabled: contextvars.ContextVar[bool] = contextvars.ContextVar("llm_ledger_enabled", default=True)
 
@@ -73,10 +74,19 @@ async def record_llm_call(
         async with get_sessionmaker()() as session:
             session.add(
                 LLMCall(
-                    company_id=ctx.company_id, agent_run_id=ctx.agent_run_id, purpose=purpose, provider=provider,
-                    model=model, status=status, input_tokens=usage.input_tokens, output_tokens=usage.output_tokens,
-                    latency_ms=usage.latency_ms, attempts=attempts, estimated_cost_usd=usage.estimated_cost_usd,
-                    error=(error or None) and error[:2000], trace_id=ctx.trace_id,
+                    company_id=ctx.company_id,
+                    agent_run_id=ctx.agent_run_id,
+                    purpose=purpose,
+                    provider=provider,
+                    model=model,
+                    status=status,
+                    input_tokens=usage.input_tokens,
+                    output_tokens=usage.output_tokens,
+                    latency_ms=usage.latency_ms,
+                    attempts=attempts,
+                    estimated_cost_usd=usage.estimated_cost_usd,
+                    error=(error or None) and error[:2000],
+                    trace_id=ctx.trace_id,
                 )
             )
             await session.commit()

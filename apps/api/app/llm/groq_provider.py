@@ -90,7 +90,10 @@ class GroqProvider(LLMProvider):
                 req["response_format"] = {"type": "json_object"}
         if tools:
             req["tools"] = [
-                {"type": "function", "function": {"name": t.name, "description": t.description, "parameters": t.parameters}}
+                {
+                    "type": "function",
+                    "function": {"name": t.name, "description": t.description, "parameters": t.parameters},
+                }
                 for t in tools
             ]
             req["tool_choice"] = "auto"
@@ -112,9 +115,16 @@ class GroqProvider(LLMProvider):
         tracer = get_tracer()
         model_params = {k: req[k] for k in ("temperature", "max_completion_tokens", "reasoning_effort") if k in req}
         with tracer.observation(
-            f"groq:{purpose}", as_type="generation", input=req["messages"], model=self._model,
-            model_parameters=model_params, metadata={"purpose": purpose, "structured": response_model is not None,
-                                                     "tools": [t.name for t in tools or []]},
+            f"groq:{purpose}",
+            as_type="generation",
+            input=req["messages"],
+            model=self._model,
+            model_parameters=model_params,
+            metadata={
+                "purpose": purpose,
+                "structured": response_model is not None,
+                "tools": [t.name for t in tools or []],
+            },
         ) as gen:
             started = time.perf_counter()
             try:
@@ -122,7 +132,9 @@ class GroqProvider(LLMProvider):
                     completion = await self._client.chat.completions.create(**req)
             except groq.APITimeoutError as exc:
                 gen.error(exc)
-                raise LLMError(ErrorCode.LLM_TIMEOUT, f"Groq timed out after {self._settings.llm_timeout_seconds}s") from exc
+                raise LLMError(
+                    ErrorCode.LLM_TIMEOUT, f"Groq timed out after {self._settings.llm_timeout_seconds}s"
+                ) from exc
             except groq.RateLimitError as exc:
                 gen.error(exc)
                 raise LLMError(ErrorCode.LLM_RATE_LIMITED, "Groq rate limit reached") from exc
@@ -133,8 +145,11 @@ class GroqProvider(LLMProvider):
                 gen.error(exc)
                 body = str(getattr(exc, "body", "") or exc)
                 if "json_validate_failed" in body or "tool_use_failed" in body:
-                    raise LLMError(ErrorCode.LLM_INVALID_OUTPUT, "Model output failed schema validation",
-                                   details={"provider_error": body[:500]}) from exc
+                    raise LLMError(
+                        ErrorCode.LLM_INVALID_OUTPUT,
+                        "Model output failed schema validation",
+                        details={"provider_error": body[:500]},
+                    ) from exc
                 raise LLMError(ErrorCode.LLM_UNAVAILABLE, f"Groq rejected the request: {body[:300]}") from exc
             except (groq.APIConnectionError, groq.InternalServerError, groq.APIStatusError) as exc:
                 gen.error(exc)

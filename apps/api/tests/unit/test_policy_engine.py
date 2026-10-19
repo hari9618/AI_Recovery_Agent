@@ -13,8 +13,16 @@ def rules(decision) -> set[PolicyRule]:
     return {f.rule for f in decision.findings}
 
 
-@pytest.mark.parametrize("action", [ActionType.CREATE_FOLLOWUP, ActionType.SCHEDULE_REMINDER, ActionType.DRAFT_EMAIL,
-                                    ActionType.LOG_ACTIVITY, ActionType.ESCALATE_TO_MANAGER])
+@pytest.mark.parametrize(
+    "action",
+    [
+        ActionType.CREATE_FOLLOWUP,
+        ActionType.SCHEDULE_REMINDER,
+        ActionType.DRAFT_EMAIL,
+        ActionType.LOG_ACTIVITY,
+        ActionType.ESCALATE_TO_MANAGER,
+    ],
+)
 def test_low_risk_internal_actions_auto_execute(action):
     d = evaluate(ActionProposal(action, deal_value=Decimal("900000")), CFG)
     assert d.allowed and d.auto_execute and not d.requires_approval and d.findings == ()
@@ -28,7 +36,9 @@ def test_email_always_needs_approval_by_default():
 
 
 def test_email_can_be_configured_safe_for_small_deals():
-    cfg = PolicyConfig(auto_send_email=True, auto_executable_actions=[*CFG.auto_executable_actions, ActionType.SEND_EMAIL])
+    cfg = PolicyConfig(
+        auto_send_email=True, auto_executable_actions=[*CFG.auto_executable_actions, ActionType.SEND_EMAIL]
+    )
     assert evaluate(ActionProposal(ActionType.SEND_EMAIL, deal_value=Decimal("50000")), cfg).auto_execute
     big = evaluate(ActionProposal(ActionType.SEND_EMAIL, deal_value=Decimal("480000")), cfg)
     assert big.requires_approval and PolicyRule.HIGH_VALUE_CUSTOMER_FACING in rules(big)
@@ -49,7 +59,9 @@ def test_discount_authority_matrix(pct, rule, role):
 
 
 def test_vertex_discount_needs_manager_for_two_reasons():
-    d = evaluate(ActionProposal(ActionType.OFFER_DISCOUNT, deal_value=Decimal("480000"), discount_pct=Decimal("12")), CFG)
+    d = evaluate(
+        ActionProposal(ActionType.OFFER_DISCOUNT, deal_value=Decimal("480000"), discount_pct=Decimal("12")), CFG
+    )
     assert {PolicyRule.DISCOUNT_ABOVE_REP_LIMIT, PolicyRule.HIGH_VALUE_CUSTOMER_FACING} <= rules(d)
     assert d.required_role == UserRole.MANAGER
 
@@ -73,10 +85,21 @@ def test_low_confidence_forces_review_even_for_safe_actions():
 
 
 def test_grounding_and_injection_guards():
-    d = evaluate(ActionProposal(ActionType.OFFER_DISCOUNT, discount_pct=Decimal("5"), policy_evidence_found=False,
-                                unverified_claims=2, injection_suspected=True), CFG)
-    assert {PolicyRule.POLICY_EVIDENCE_INSUFFICIENT, PolicyRule.UNVERIFIED_CLAIMS,
-            PolicyRule.PROMPT_INJECTION_SUSPECTED} <= rules(d)
+    d = evaluate(
+        ActionProposal(
+            ActionType.OFFER_DISCOUNT,
+            discount_pct=Decimal("5"),
+            policy_evidence_found=False,
+            unverified_claims=2,
+            injection_suspected=True,
+        ),
+        CFG,
+    )
+    assert {
+        PolicyRule.POLICY_EVIDENCE_INSUFFICIENT,
+        PolicyRule.UNVERIFIED_CLAIMS,
+        PolicyRule.PROMPT_INJECTION_SUSPECTED,
+    } <= rules(d)
     assert d.required_role == UserRole.MANAGER
 
 

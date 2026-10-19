@@ -52,7 +52,9 @@ async def demo(request) -> dict:
         await conn.execute(text("CREATE SCHEMA public"))
     # Migrate with the real Alembic migration (also proves the migration applies cleanly).
     env = os.environ | {"DATABASE_URL": get_settings().database_url}
-    subprocess.run([sys.executable, "-m", "alembic", "upgrade", "head"], cwd=API_ROOT, env=env, check=True, capture_output=True)
+    subprocess.run(  # noqa: ASYNC221 - one-off migration during test setup
+        [sys.executable, "-m", "alembic", "upgrade", "head"], cwd=API_ROOT, env=env, check=True, capture_output=True
+    )
     async with get_sessionmaker()() as s:
         info = await load_demo(s)
     company_id = uuid.UUID(info["company_id"])
@@ -62,15 +64,26 @@ async def demo(request) -> dict:
         other = m.Company(name="Other Tenant Ltd", industry="Retail", currency="INR", settings={}, is_demo=False)
         s.add(other)
         await s.flush()
-        s.add(m.User(company_id=other.id, email="owner@othertenant.in", full_name="Other Owner", role=UserRole.OWNER,
-                     api_token_hash=hash_token(OTHER_TENANT_TOKEN)))
+        s.add(
+            m.User(
+                company_id=other.id,
+                email="owner@othertenant.in",
+                full_name="Other Owner",
+                role=UserRole.OWNER,
+                api_token_hash=hash_token(OTHER_TENANT_TOKEN),
+            )
+        )
         await s.commit()
     return info
 
 
 def _client(token: str) -> httpx.AsyncClient:
-    return httpx.AsyncClient(transport=httpx.ASGITransport(app=create_app()), base_url="http://test/api/v1",
-                             headers={"Authorization": f"Bearer {token}"}, timeout=120)
+    return httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=create_app()),
+        base_url="http://test/api/v1",
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=120,
+    )
 
 
 @pytest.fixture

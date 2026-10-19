@@ -44,7 +44,12 @@ class ScriptedLLM(LLMProvider):
         max_tokens: int | None = None,
     ) -> LLMResponse:
         self.calls.append(
-            {"purpose": purpose, "messages": messages, "response_model": response_model, "tools": [t.name for t in tools or []]}
+            {
+                "purpose": purpose,
+                "messages": messages,
+                "response_model": response_model,
+                "tools": [t.name for t in tools or []],
+            }
         )
         queue = self._by_purpose.get(purpose) or self._queue
         if not queue:
@@ -56,7 +61,9 @@ class ScriptedLLM(LLMProvider):
             raise reply
         usage = LLMUsage(input_tokens=100, output_tokens=50, latency_ms=5)
         if isinstance(reply, list):
-            return LLMResponse(content=None, model=self.model, usage=usage, tool_calls=reply, finish_reason="tool_calls")
+            return LLMResponse(
+                content=None, model=self.model, usage=usage, tool_calls=reply, finish_reason="tool_calls"
+            )
         if isinstance(reply, BaseModel):
             reply = reply.model_dump_json()
         elif isinstance(reply, dict):
