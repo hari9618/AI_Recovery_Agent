@@ -1,0 +1,13 @@
+**/.venv
+**/node_modules
+**/.next
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+.devdb
+.cache
+.git
+.env
+.env.*
+!.env.example
+evals/experiments/*.json
