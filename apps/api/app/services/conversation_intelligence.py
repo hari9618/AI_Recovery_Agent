@@ -94,7 +94,7 @@ async def load_conversation(session: AsyncSession, company_id: uuid.UUID, conver
 
 
 def _outcome_from_row(row: m.ConversationAnalysis, conversation_id: uuid.UUID) -> AnalysisOutcome:
-    insight = ConversationInsight.model_validate(row.analysis) if row.analysis else None
+    insight = ConversationInsight.from_stored(row.analysis) if row.analysis else None
     return AnalysisOutcome(
         conversation_id=conversation_id, status=row.status, cached=True, insight=insight, model=row.model,
         dropped_quotes=row.analysis.get("_dropped_quotes", []) if row.analysis else [],

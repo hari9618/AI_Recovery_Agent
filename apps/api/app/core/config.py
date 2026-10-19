@@ -76,8 +76,11 @@ class Settings(BaseSettings):
     rag_chunk_overlap_chars: int = 150
     # Minimum reranker relevance (sigmoid of cross-encoder logit) to count as evidence.
     rag_min_relevance: float = 0.2
-    # Minimum claim↔evidence cosine similarity for a citation to count as supported.
-    rag_min_claim_support: float = 0.55
+    # Claim↔evidence support thresholds: cross-encoder relevance (preferred) or bi-encoder cosine (fallback).
+    # Measured on the demo corpus: supporting passages score ~1.0 with the cross-encoder, unrelated ones ~0.0,
+    # while cosine gives 0.55–0.65 for unrelated passages of the same domain — hence the stricter cosine bar.
+    rag_min_claim_support_xenc: float = 0.5
+    rag_min_claim_support: float = 0.7
     # Withhold chunks flagged by the injection scanner from LLM context (they stay visible in search).
     rag_exclude_flagged_from_llm: bool = True
 

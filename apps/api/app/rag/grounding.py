@@ -23,7 +23,7 @@ from app.llm.base import LLMProvider, LLMUsage
 from app.llm.structured import generate_structured
 from app.observability.tracing import get_tracer
 from app.prompts.grounded import LLMGroundedAnswer, build_messages
-from app.rag.models import Embedder, cosine
+from app.rag.models import Embedder, Reranker, cosine
 from app.rag.retriever import Evidence, HybridRetriever, RetrievalResult
 
 GroundedStatus = Literal["ANSWERED", "PARTIALLY_SUPPORTED", "INSUFFICIENT_EVIDENCE", "LLM_FALLBACK"]
@@ -83,14 +83,24 @@ def format_evidence(evidence: list[Evidence]) -> str:
 
 
 async def verify_claims(embedder: Embedder, claims: list[tuple[str, list[str]]], evidence: list[Evidence],
-                        min_support: float, trusted_context: str = "") -> list[VerifiedClaim]:
-    """`trusted_context` (CRM facts) may supply numbers such as the deal value; policy numbers must be cited."""
+                        min_support: float, trusted_context: str = "", reranker: Reranker | None = None,
+                        min_support_xenc: float = 0.5) -> list[VerifiedClaim]:
+    """Check each claim against the passages it cites.
+
+    Support is the cross-encoder relevance of (claim, cited passage) when a reranker is available — it separates
+    supporting from merely on-topic passages far better than bi-encoder cosine — otherwise cosine similarity.
+    `trusted_context` (CRM facts) may supply numbers such as the deal value; policy numbers must be cited.
+    """
     by_id = {e.evidence_id: e for e in evidence}
-    texts = [c for c, _ in claims] + [e.content for e in evidence]
-    vectors = await embedder.aembed_documents(texts) if texts else []
-    claim_vecs, ev_vecs = vectors[: len(claims)], dict(zip([e.evidence_id for e in evidence], vectors[len(claims):], strict=True))
+    threshold = min_support_xenc if reranker is not None else min_support
+    claim_vecs: list[list[float]] = []
+    ev_vecs: dict[str, list[float]] = {}
+    if reranker is None and claims:
+        vectors = await embedder.aembed_documents([c for c, _ in claims] + [e.content for e in evidence])
+        claim_vecs = vectors[: len(claims)]
+        ev_vecs = dict(zip([e.evidence_id for e in evidence], vectors[len(claims):], strict=True))
     out: list[VerifiedClaim] = []
-    for (claim, ids), cvec in zip(claims, claim_vecs, strict=True):
+    for n, (claim, ids) in enumerate(claims):
         problems: list[str] = []
         valid = [i for i in dict.fromkeys(ids) if i in by_id]
         if len(valid) < len(set(ids)):
@@ -99,14 +109,18 @@ async def verify_claims(embedder: Embedder, claims: list[tuple[str, list[str]]],
             problems.append("no valid citation")
             out.append(VerifiedClaim(claim, False, None, None, None, None, 0.0, problems))
             continue
-        best = max(valid, key=lambda i: cosine(cvec, ev_vecs[i]))
-        support = cosine(cvec, ev_vecs[best])
+        if reranker is not None:
+            scores = await reranker.ascore(claim, [by_id[i].content for i in valid])
+            best, support = max(zip(valid, scores, strict=True), key=lambda x: x[1])
+        else:
+            best = max(valid, key=lambda i: cosine(claim_vecs[n], ev_vecs[i]))
+            support = cosine(claim_vecs[n], ev_vecs[best])
         cited_text = (" ".join(by_id[i].content for i in valid) + " " + trusted_context).replace(",", "")
         missing_numbers = {n for n in _numbers(claim) if n not in cited_text}
         if missing_numbers:
             problems.append(f"numbers not found in cited evidence: {sorted(missing_numbers)}")
-        if support < min_support:
-            problems.append(f"low semantic support ({support:.2f} < {min_support})")
+        if support < threshold:
+            problems.append(f"cited passage does not support the claim (score {support:.2f} < {threshold})")
         ev = by_id[best]
         out.append(VerifiedClaim(claim, not problems, ev.evidence_id, ev.document_title, ev.section,
                                  round(ev.retrieval_score, 4), support, problems))
@@ -155,7 +169,8 @@ async def answer_with_citations(
             return GroundedAnswer(question, "INSUFFICIENT_EVIDENCE", "", [], usable, withheld,
                                   limitations + ["The passages do not answer this question."], result.model, result.usage, retrieval)
         claims = await verify_claims(retriever.embedder, [(c.claim, c.evidence_ids) for c in draft.claims], usable,
-                                     settings.rag_min_claim_support, business_context or "")
+                                     settings.rag_min_claim_support, business_context or "", retriever.reranker,
+                                     settings.rag_min_claim_support_xenc)
         supported = [c for c in claims if c.supported]
         status: GroundedStatus = (
             "INSUFFICIENT_EVIDENCE" if not supported else "ANSWERED" if len(supported) == len(claims) else "PARTIALLY_SUPPORTED"

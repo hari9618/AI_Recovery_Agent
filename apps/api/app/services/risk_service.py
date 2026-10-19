@@ -59,7 +59,7 @@ _INTENT_ORDER = {"unknown": -1, "low": 0, "medium": 1, "high": 2}
 
 
 def merge_conversation_signals(
-    llm: list[ConversationInsight], heuristic_texts: list[str], known_competitors: list[str]
+    llm: list[ConversationInsight], heuristic_texts: list[str], competitor_names: list[str]
 ) -> _ConvSignals:
     """Combine LLM analyses (preferred) with keyword heuristics for un-analysed conversations."""
     out = _ConvSignals(evidence={})
@@ -78,7 +78,7 @@ def merge_conversation_signals(
         if out.sentiment != "negative":
             out.sentiment, out.sentiment_source = insight.sentiment, SignalSource.LLM_ANALYSIS
     if heuristic_texts:
-        h = analyze_customer_messages(heuristic_texts, known_competitors)
+        h = analyze_customer_messages(heuristic_texts, competitor_names)
         if out.intent_source == SignalSource.NONE:
             out.intent, out.intent_source = h.intent, SignalSource.KEYWORD_HEURISTIC
         if h.competitor_mentioned and not out.competitor:
@@ -120,6 +120,16 @@ async def historical_win_rates(
     return rates
 
 
+async def known_competitors(session: AsyncSession, company_id: uuid.UUID) -> list[str]:
+    """Competitor names recorded on this tenant's opportunities (used by the keyword heuristic)."""
+    rows = await session.scalars(
+        select(m.Opportunity.competitor)
+        .where(m.Opportunity.company_id == company_id, m.Opportunity.competitor.is_not(None))
+        .distinct()
+    )
+    return [c for c in rows.all() if c]
+
+
 async def build_signals(
     session: AsyncSession,
     company_id: uuid.UUID,
@@ -142,11 +152,7 @@ async def build_signals(
         )).all()
     )
     win_rates = await historical_win_rates(session, company_id, now)
-    known_competitors = [
-        c for c in (await session.scalars(
-            select(m.Opportunity.competitor).where(m.Opportunity.company_id == company_id, m.Opportunity.competitor.is_not(None)).distinct()
-        )).all() if c
-    ]
+    competitors = await known_competitors(session, company_id)
 
     quotes_by_opp: dict[uuid.UUID, m.Quote] = {}
     for q in (await session.scalars(
@@ -186,7 +192,7 @@ async def build_signals(
                 m.ConversationAnalysis.status.in_((LLMCallStatus.OK, LLMCallStatus.REPAIRED)),
             )
         )).all():
-            analyses[(a.conversation_id, a.content_hash)] = ConversationInsight.model_validate(a.analysis)
+            analyses[(a.conversation_id, a.content_hash)] = ConversationInsight.from_stored(a.analysis)
     convs_by_opp: dict[uuid.UUID, list[m.Conversation]] = defaultdict(list)
     for c in convs:
         convs_by_opp[c.opportunity_id].append(c)  # type: ignore[index]
@@ -208,7 +214,7 @@ async def build_signals(
                 llm_insights.append(insight)
             else:
                 heuristic_texts += [x.body for x in messages[c.id] if x.sender_type == SenderType.CUSTOMER]
-        conv_sig = merge_conversation_signals(llm_insights, heuristic_texts, known_competitors)
+        conv_sig = merge_conversation_signals(llm_insights, heuristic_texts, competitors)
 
         quote = quotes_by_opp.get(opp.id)
         live = bool(quote and quote.status in LIVE_QUOTE_STATUSES)

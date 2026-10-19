@@ -93,6 +93,7 @@ class PolicyConfig(BaseModel):
             ActionType.SCHEDULE_REMINDER,
             ActionType.DRAFT_EMAIL,
             ActionType.LOG_ACTIVITY,
+            ActionType.ESCALATE_TO_MANAGER,
         ]
     )
     customer_facing_actions: list[ActionType] = Field(

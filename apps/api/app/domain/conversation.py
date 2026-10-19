@@ -50,6 +50,11 @@ class ConversationInsight(BaseModel):
     evidence_quotes: list[str] = Field(description="Up to 3 verbatim customer quotes supporting the analysis")
     confidence: float = Field(ge=0.0, le=1.0, description="Confidence in this analysis, 0–1")
 
+    @classmethod
+    def from_stored(cls, data: dict) -> ConversationInsight:
+        """Validate a stored analysis, ignoring bookkeeping keys (prefixed with `_`)."""
+        return cls.model_validate({k: v for k, v in data.items() if not k.startswith("_")})
+
     @property
     def has_price_objection(self) -> bool:
         return any(o.type == "price" for o in self.objections)
