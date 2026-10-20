@@ -62,5 +62,5 @@ Live only. Tool selection (expected tool / any-of / forbidden), argument constra
 
 ## Unit/integration tests vs evaluation
 
-Tests (`pytest`, 147) assert *code correctness* deterministically and gate commits. Evaluations measure *system
+Tests (`pytest`, 160) assert *code correctness* deterministically and gate commits. Evaluations measure *system
 behaviour* over a dataset and produce metrics; offline runs are suitable for CI, live runs for model/prompt changes.

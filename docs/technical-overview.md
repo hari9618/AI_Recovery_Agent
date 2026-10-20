@@ -1,4 +1,6 @@
-# AI Revenue Recovery Agent
+# Technical overview
+
+> The full engineering write-up. For a quick, plain-language introduction start with the [README](../README.md).
 
 > An AI employee that finds, explains, prioritises and helps recover lost revenue before the business owner discovers it.
 
@@ -12,7 +14,7 @@ grounded recommendation → policy check), and a **human approves** anything cus
 | | |
 |---|---|
 | Synthetic demo tenant | 342 customers · 521 leads · 271 opportunities · 211 quotations · 331 conversations · 9 policy documents |
-| Tests | 147 passing (unit, integration on real Postgres/pgvector, end-to-end through the HTTP API) |
+| Tests | 160 passing (unit, integration on real Postgres/pgvector, end-to-end through the HTTP API) |
 | Agent evaluation (offline, scripted LLM) | 42 / 42 scenarios — approval, policy and tool-use compliance 1.000 |
 | RAG retrieval (offline, no LLM) | hit-rate 1.000 · MRR 0.967 over 20 policy questions |
 
@@ -40,13 +42,15 @@ rarely say so — they buy elsewhere. The revenue is lost silently; the owner se
 
 | Page | What it answers |
 |---|---|
-| **Dashboard** | Revenue at risk, recovered revenue, high-risk deals, overdue follow-ups, AI actions, automation success rate; why revenue is at risk; per-rep discipline |
+| **Landing (`/`)** | Product story with live numbers from the demo workspace, a replay of the latest real agent run and an interactive walkthrough of the Vertex scenario |
+| **Dashboard (`/dashboard`)** | Revenue at risk, recovered revenue, high-risk deals, overdue follow-ups, AI actions, automation success rate; why revenue is at risk; per-rep discipline |
 | **Revenue Risks** | Every open deal scored 0–100 with reason codes, evidence and next step |
 | **Customer Intelligence** | Unified profile (value, stage, intent, probability, risk, last contact, objection, competitor, next action) + timeline, quotes, conversations, AI insights, evidence, audit |
 | **Conversations** | Transcript + validated LLM analysis (or a clearly labelled keyword heuristic) |
 | **Agent Runs** | Live workflow view: each node, its output, latency, tokens, cost and Langfuse trace |
 | **Approval Center** | What happened · why risky · evidence · recommendation · what happens if approved · why approval is required → Approve / Edit / Reject |
-| **Revenue Copilot** | Natural-language Q&A answered only through read-only tool calls (shown) |
+| **Slack alerts** | When the agent drafts a customer email that needs approval, the sales channel gets the deal, risk reasons, who to call and the draft, with links to review; approvals/rejections are posted back. Optional (`SLACK_WEBHOOK_URL`), best-effort, audited, mrkdwn-escaped |
+| **Revenue AI chat** | Floating assistant on every page (`Ctrl/⌘ J`), plus a full-screen view with a tool trace. Multi-turn: the last turns are replayed (bounded, neutralised); every answer comes only from read-only tool calls, which are shown |
 | **Knowledge Base** | Policy documents, injection scan results, hybrid-search inspector, grounded Q&A with verified citations |
 | **Data Import** | CSV/JSON with row-level validation, de-duplication and entity resolution |
 | **Evaluations · Observability · Audit · Settings · ROI** | Measured quality, cost/latency, append-only audit, tunable thresholds, observed vs estimated ROI |
@@ -100,7 +104,7 @@ flowchart TB
 ```
 
 Layering: `domain/` (risk, policy, settings) is pure Python with no I/O; services orchestrate DB + domain; the agent
-calls **tools**, never the ORM; routers are thin. Details: [docs/architecture.md](docs/architecture.md).
+calls **tools**, never the ORM; routers are thin. Details: [docs/architecture.md](architecture.md).
 
 ## 5. Agent workflow
 
@@ -138,7 +142,7 @@ sequenceDiagram
 ```
 
 Two graphs with a durable hand-off in Postgres: approvals can take days and must survive restarts. Every transition is
-a named edge with a deterministic condition — no open-ended loop. See [docs/agent-workflow.md](docs/agent-workflow.md).
+a named edge with a deterministic condition — no open-ended loop. See [docs/agent-workflow.md](agent-workflow.md).
 
 ## 6. Data flow
 
@@ -164,7 +168,7 @@ RAG is used **only** for unstructured policy/playbook text. Deals, quotes, dates
   the cited text. Unsupported claims are reported, not kept. Output: `claim · source_document · source_section ·
   retrieval_score · support_score`.
 
-Details and measurements: [docs/rag.md](docs/rag.md).
+Details and measurements: [docs/rag.md](rag.md).
 
 ## 8. Tool calling
 
@@ -246,7 +250,7 @@ uv run --project apps/api python -m evals.run --suite agent --mode offline
 Offline agent runs use a scripted LLM: they prove the orchestration, guardrails and database effects, **not** model
 quality. Live numbers (Ragas faithfulness, answer relevancy, context precision/recall, copilot tool accuracy) are
 produced by running the live suite with a Groq key; until then the app shows **“Not evaluated yet”**.
-Reports: `evals/reports/latest_<suite>_<mode>.md`. Details: [docs/evaluation.md](docs/evaluation.md).
+Reports: `evals/reports/latest_<suite>_<mode>.md`. Details: [docs/evaluation.md](evaluation.md).
 
 ## 13. Ragas
 
@@ -275,7 +279,7 @@ expand nodes → click a generation for prompt, model, token usage and cost → 
 reranker scores → use the timeline for per-step latency → scores (`grounding_score`, `recommendation_confidence`,
 `eval_*_passed`) are on the trace. Langfuse failures never break a workflow (a unit test runs the whole trace API
 against a client that raises on every call). Token/latency/cost also go to the local `llm_calls` table, shown on the
-Observability page. Details: [docs/llmops.md](docs/llmops.md).
+Observability page. Details: [docs/llmops.md](llmops.md).
 
 ## 15. Security
 
@@ -283,13 +287,13 @@ Bearer-token authentication resolving to a tenant-scoped principal (OIDC-ready s
 admin < owner) on approvals and settings · tenant filter on every query · SQLAlchemy parameterised queries only ·
 upload validation by extension **and** content signature, size caps, no executable formats · API token only on the
 Next.js server (proxy) · secrets via environment, never logged or sent to the LLM · append-only audit log ·
-prompt-injection defences above. Details: [docs/security.md](docs/security.md).
+prompt-injection defences above. Details: [docs/security.md](security.md).
 
 ## 16. Testing
 
 ```bash
 uv run --project apps/api python scripts/dev_db.py start     # local Postgres + pgvector
-cd apps/api && uv run pytest -q                              # 147 tests
+cd apps/api && uv run pytest -q                              # 160 tests
 ```
 
 Unit (risk engine, policy engine, heuristics, BM25/RRF/chunking, injection scanner, claim verification, structured
@@ -299,6 +303,12 @@ timestamps → risk detected → agent → policy retrieved → recommendation �
 revised quote + outbox email → verification → audit → deal won → recovered revenue attributed.*
 
 ## 17. Deployment
+
+**Hosted (private demo):** Vercel for the web app, Render for the API (`render.yaml`), Neon for Postgres + pgvector.
+The site sits behind an access code (`ACCESS_CODE`): pages redirect to a "Private demo" screen and API calls are refused
+until the visitor enters it. Step-by-step guide: [docs/deploy.md](deploy.md).
+
+**Self-hosted:**
 
 ```bash
 cp .env.example .env            # add GROQ_API_KEY (and optionally Langfuse keys)
@@ -329,7 +339,7 @@ header (it also bootstraps an empty database).
 **Primary demo — Vertex Industrial Solutions (₹4,80,000):** Day 1 lead · Day 2 call · Day 3 quote · Day 5 asks for a
 better price · Day 6 mentions Voltrix Systems at ₹4,10,000 · Day 9 silence.
 
-1. Dashboard → *Act today*: Vertex is **CRITICAL 94/100**, ₹4,80,000 at risk.
+1. `/dashboard` → *Act today*: Vertex is **CRITICAL 94/100**, ₹4,80,000 at risk.
 2. Customer page → risk card lists every reason with its points and source.
 3. *Run recovery agent* → watch the workflow: conversation analysis (high intent, price + competitor objections),
    risk engine, 4 policy queries planned from the reasons, recommendation, grounding, policy check.
@@ -353,7 +363,8 @@ review. Add `GROQ_API_KEY` + `GROQ_MODEL=openai/gpt-oss-120b` for the full AI pa
 - Synthetic data; risk weights are reasoned defaults, not fitted to a real company's outcomes.
 - Purchase probability is a calibrated heuristic (stage base × historical win rate × intent), not a trained model.
 - Email is recorded to an outbox; no email provider integration. No CRM connectors (HubSpot/Salesforce) yet.
-- Live Ragas / copilot numbers require a Groq key; only offline evaluations were run while building.
+- Live Ragas / copilot evaluation suites have not been run yet (`python -m evals.run --mode live`); on Groq's free tier
+  (8k tokens/min) they are slow. The live agent and chat paths have been exercised manually.
 - Auth is token-based with a demo token; production needs OIDC/SSO and secret rotation.
 - Docker images were authored but not built on the development machine.
 - The injection scanner is pattern-based; it is one layer of defence, not a guarantee.
@@ -367,7 +378,7 @@ multilingual conversation analysis.
 
 ---
 
-**Docs:** [architecture](docs/architecture.md) · [business problem](docs/business-problem.md) ·
-[agent workflow](docs/agent-workflow.md) · [RAG](docs/rag.md) · [evaluation](docs/evaluation.md) ·
-[LLMOps](docs/llmops.md) · [security](docs/security.md) · [engineering decisions](docs/engineering-decisions.md) ·
-[interview guide](docs/interview-guide.md) · [implementation plan](docs/implementation-plan.md)
+**Docs:** [architecture](architecture.md) · [business problem](business-problem.md) ·
+[agent workflow](agent-workflow.md) · [RAG](rag.md) · [evaluation](evaluation.md) ·
+[LLMOps](llmops.md) · [security](security.md) · [engineering decisions](engineering-decisions.md) ·
+[interview guide](interview-guide.md) · [implementation plan](implementation-plan.md)

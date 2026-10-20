@@ -140,7 +140,7 @@ CRM connectors with webhook-driven re-scoring, risk weights learned from won and
 email and WhatsApp delivery, OIDC, and online evaluation sampled from production traces.
 
 **24. How do you know it works?**
-- 147 automated tests, including an HTTP end-to-end flow from lead import to recovered revenue.
+- 160 automated tests, including an HTTP end-to-end flow from lead import to recovered revenue.
 - 42/42 offline agent scenarios.
 - Retrieval hit-rate 1.0 on the policy set.
 - Every claim in the UI is traceable to a database row, a reason code, a cited passage or a Langfuse span.

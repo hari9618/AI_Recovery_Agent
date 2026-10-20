@@ -146,3 +146,8 @@ the preparation work; the human keeps the decision.
 | Outbox email transport | No email provider is integrated; the UI and API state "recorded in outbox, not delivered". Nothing pretends to send. |
 | Next.js server-side proxy for the API | The API token never reaches the browser. |
 | Redis optional | Nothing in the critical path needs it at demo scale; the code keeps caches in-process (BM25 per tenant). |
+| Chat memory replays only visible text | The copilot gets the last 8 turns (each capped at 1,500 chars); earlier answers are neutralised like tool data and a client cannot inject a `system` turn. Facts still come from tools on every turn. |
+| Model markdown rendered without raw HTML | Answers render through `react-markdown` with no HTML pass-through; stray `<br>` in table cells becomes a real line break via a marker, never via HTML. |
+| Strict-schema keyword stripping skips `properties` | The schema cleaner dropped a field literally named `title`, so every live recommendation failed validation. Field names are now never treated as keywords (regression test added). The scripted test LLM could not catch it; the first live run did. |
+| `useHydrated()` gate for shared queries | Suspense boundaries hydrate separately, so a query started by the header can resolve before the sidebar/page hydrate; data is rendered only after hydration to keep server and client HTML identical. |
+| Design system: warm white, ink and copper | Bricolage Grotesque headlines, Geist text and Geist Mono figures; copper as the single brand colour with blue and mint accents; navy "data" panels for live numbers. Motion is limited to reveals, count-ups and layout transitions, all disabled under `prefers-reduced-motion`. |
