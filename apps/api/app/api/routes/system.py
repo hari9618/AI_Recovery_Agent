@@ -9,9 +9,11 @@ from sqlalchemy import func, select, text
 
 from app.api.deps import AdminDep, PrincipalDep, SessionDep
 from app.core.config import get_settings
+from app.core.errors import AppError, ErrorCode
 from app.db import models as m
-from app.domain.enums import ActorType
+from app.domain.enums import ActorType, AuditResult
 from app.domain.settings import CompanySettings
+from app.integrations.slack import post_to_slack, test_message
 from app.llm.pricing import price_for
 from app.observability.tracing import get_tracer
 from app.services.audit import record_audit
@@ -35,6 +37,7 @@ async def health(session: SessionDep) -> dict:
         "llm_configured": settings.llm_configured,
         "llm_model": settings.groq_model if settings.llm_configured else None,
         "langfuse_configured": settings.langfuse_configured,
+        "slack_configured": settings.slack_configured,
         "time": datetime.now(UTC),
     }
 
@@ -212,3 +215,45 @@ async def observability_usage(
             for r in recent
         ],
     }
+
+
+# ------------------------------------------------------------------------------ integrations
+@router.get("/integrations")
+async def integrations(principal: PrincipalDep) -> dict:
+    """Which outbound integrations are configured. Never returns the secrets themselves."""
+    s = get_settings()
+    return {
+        "slack": {
+            "configured": s.slack_configured,
+            "events": ["approval_requested", "approval_approved", "approval_rejected"],
+            "app_public_url": s.app_public_url,
+        },
+        "email": {"configured": False, "transport": "outbox"},
+    }
+
+
+@router.post("/integrations/slack/test")
+async def slack_test(principal: AdminDep, session: SessionDep) -> dict:
+    """Post a connection test message to the configured Slack channel."""
+    s = get_settings()
+    if not s.slack_configured:
+        raise AppError(
+            ErrorCode.INVALID_REQUEST, "Slack is not configured: set SLACK_WEBHOOK_URL in .env and restart the API"
+        )
+    company = await get_company(session, principal.company_id)
+    delivery = await post_to_slack(test_message(company.name, s.app_public_url))
+    record_audit(
+        session,
+        company_id=principal.company_id,
+        action="slack.test",
+        actor_type=ActorType.USER,
+        actor_id=str(principal.user_id),
+        actor_name=principal.name,
+        tool="slack_webhook",
+        output={"status": delivery.status, "error": delivery.error},
+        result=AuditResult.SUCCESS if delivery.ok else AuditResult.FAILURE,
+    )
+    await session.commit()
+    if not delivery.ok:
+        raise AppError(ErrorCode.TOOL_FAILURE, delivery.error or "Slack post failed")
+    return {"ok": True}

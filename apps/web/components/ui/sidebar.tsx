@@ -161,7 +161,10 @@ function Sidebar({
   variant?: "sidebar" | "floating" | "inset"
   collapsible?: "offcanvas" | "icon" | "none"
 }) {
-  const { isMobile, state, openMobile, setOpenMobile } = useSidebar()
+  // Read the media query here rather than from context: during this boundary's own hydration the hook
+  // returns the server snapshot (desktop), so the markup matches; the provider may already be past it.
+  const { state, openMobile, setOpenMobile } = useSidebar()
+  const isMobile = useIsMobile()
 
   if (collapsible === "none") {
     return (

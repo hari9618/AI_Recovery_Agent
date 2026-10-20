@@ -77,7 +77,7 @@ export default function AgentRunPage() {
         </Alert>
       ) : null}
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card>
           <CardHeader>
             <CardTitle>Workflow</CardTitle>
@@ -161,7 +161,7 @@ export default function AgentRunPage() {
           <CardHeader>
             <CardTitle>Execution & verification</CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-4 md:grid-cols-2">
+          <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <ul className="space-y-2 text-sm">
               {run.state.execution_result.results?.map((r, i) => (
                 <li key={i} className="rounded-lg border p-3">

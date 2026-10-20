@@ -70,7 +70,7 @@ export default function ImportPage() {
         title="Data import"
         description="CSV or JSON. Every row is validated, normalised (names, emails, ₹ amounts like “4.8L”, dates), de-duplicated and matched to existing customers before anything is written."
       />
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle>Upload</CardTitle>

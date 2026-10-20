@@ -264,3 +264,75 @@ async def test_healthy_deal_needs_no_action(owner):
 async def test_unknown_opportunity_is_404(owner):
     r = await owner.post("/agent/runs", json={"opportunity_id": "00000000-0000-4000-8000-000000000000"})
     assert r.status_code == 404
+
+
+async def _until(predicate, seconds: float = 10) -> None:
+    deadline = asyncio.get_event_loop().time() + seconds
+    while not predicate():
+        assert asyncio.get_event_loop().time() < deadline, "condition not met in time"
+        await asyncio.sleep(0.1)
+
+
+async def test_slack_alerts_on_approval_needed_and_on_decision(owner, monkeypatch):
+    import json
+
+    import httpx
+    from pydantic import SecretStr
+
+    from app.core.config import get_settings
+    from app.integrations import slack
+
+    posted: list[dict] = []
+    monkeypatch.setattr(get_settings(), "slack_webhook_url", SecretStr("https://hooks.slack.com/services/T/B/X"))
+    slack.set_slack_transport(
+        httpx.MockTransport(lambda r: posted.append(json.loads(r.content)) or httpx.Response(200))
+    )
+    try:
+        _, opp_id = await _create_scenario(owner, "Mahanadi Polymers Pvt Ltd")
+        set_llm_override(
+            ScriptedLLM(by_purpose={"conversation_analysis": [INSIGHT], "recommendation": [recommendation_reply(8.0)]})
+        )
+        run = await _wait(owner, (await owner.post("/agent/runs", json={"opportunity_id": opp_id})).json()["run_id"])
+        assert run["status"] == "awaiting_approval"
+        await _until(lambda: len(posted) >= 1)
+        alert = json.dumps(posted[0], ensure_ascii=False)
+        assert "Deal at risk: Mahanadi Polymers Pvt Ltd" in alert and "Draft email" in alert and "Meghna Rath" in alert
+
+        out = (await owner.post(f"/approvals/{run['approval']['id']}/decision", json={"decision": "approve"})).json()
+        assert out["status"] == "approved"
+        assert len(posted) == 2
+        decided = json.dumps(posted[1], ensure_ascii=False)
+        assert "approved the follow-up for *Mahanadi Polymers Pvt Ltd*" in decided and "outbox" in decided
+
+        audit = (await owner.get("/audit", params={"action": "slack.notified", "limit": 10})).json()["items"]
+        assert len(audit) == 2 and all(a["result"] == "success" for a in audit)
+    finally:
+        slack.set_slack_transport(None)
+
+
+async def test_slack_outage_never_blocks_approvals(owner, monkeypatch):
+    import httpx
+    from pydantic import SecretStr
+
+    from app.core.config import get_settings
+    from app.integrations import slack
+
+    monkeypatch.setattr(get_settings(), "slack_webhook_url", SecretStr("https://hooks.slack.com/services/T/B/X"))
+    slack.set_slack_transport(httpx.MockTransport(lambda r: httpx.Response(500, text="internal_error")))
+    try:
+        customer_id, opp_id = await _create_scenario(owner, "Sabarmati Ceramics Pvt Ltd")
+        set_llm_override(
+            ScriptedLLM(by_purpose={"conversation_analysis": [INSIGHT], "recommendation": [recommendation_reply(8.0)]})
+        )
+        run = await _wait(owner, (await owner.post("/agent/runs", json={"opportunity_id": opp_id})).json()["run_id"])
+        assert run["status"] == "awaiting_approval"
+        out = (await owner.post(f"/approvals/{run['approval']['id']}/decision", json={"decision": "approve"})).json()
+        assert out["status"] == "approved" and out["verification"]["all_passed"]
+        audit = (
+            await owner.get("/audit", params={"action": "slack.notified", "customer_id": customer_id, "limit": 10})
+        ).json()["items"]
+        assert len(audit) == 2 and all(a["result"] == "failure" for a in audit)
+        r = await owner.post("/integrations/slack/test")
+        assert r.status_code >= 400 and "500" in r.json()["error"]["message"]
+    finally:
+        slack.set_slack_transport(None)

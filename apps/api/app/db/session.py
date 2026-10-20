@@ -17,8 +17,8 @@ def get_engine() -> AsyncEngine:
         settings.database_url,
         echo=settings.database_echo,
         pool_pre_ping=True,
-        pool_size=10,
-        max_overflow=10,
+        pool_size=settings.database_pool_size,
+        max_overflow=settings.database_pool_size,
     )
 
 

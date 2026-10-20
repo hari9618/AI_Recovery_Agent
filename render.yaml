@@ -1,0 +1,48 @@
+# Render Blueprint for the API (FastAPI + LangGraph agent).
+# Render dashboard -> New -> Blueprint -> pick this repository. The web app goes on Vercel (see docs/deploy.md).
+services:
+  - type: web
+    name: revenue-recovery-api
+    runtime: docker
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: .
+    # Starter keeps the service awake and has room for the two local ONNX models; "free" sleeps after 15 min
+    # idle and has 512 MB RAM.
+    plan: starter
+    region: singapore
+    healthCheckPath: /api/v1/health
+    autoDeploy: true
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: LOG_LEVEL
+        value: INFO
+      # Neon / Supabase connection string (direct, not the transaction pooler). Any postgres:// form works.
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_POOL_SIZE
+        value: "5"
+      # Shared secret between the web app's server-side proxy and this API. Copy it into Vercel as API_TOKEN.
+      - key: DEMO_API_TOKEN
+        generateValue: true
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        value: openai/gpt-oss-120b
+      - key: GROQ_REASONING_EFFORT
+        value: low
+      - key: LLM_MAX_RETRIES
+        value: "4"
+      - key: LANGFUSE_PUBLIC_KEY
+        sync: false
+      - key: LANGFUSE_SECRET_KEY
+        sync: false
+      - key: LANGFUSE_HOST
+        value: https://us.cloud.langfuse.com
+      - key: SLACK_WEBHOOK_URL
+        sync: false
+      # Your Vercel URL, e.g. https://revenue-recovery.vercel.app (used for links in Slack messages).
+      - key: APP_PUBLIC_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false

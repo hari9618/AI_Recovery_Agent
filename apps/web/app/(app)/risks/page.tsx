@@ -128,7 +128,7 @@ export default function RisksPage() {
                       <TableRow className="bg-muted/30 hover:bg-muted/30">
                         <TableCell />
                         <TableCell colSpan={6} className="py-4">
-                          <div className="grid gap-6 md:grid-cols-3">
+                          <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
                             <div className="md:col-span-2">
                               <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Why this score</p>
                               <ReasonList reasons={r.reasons} />

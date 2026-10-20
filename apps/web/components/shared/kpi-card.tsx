@@ -1,5 +1,17 @@
-import { Card, CardContent } from "@/components/ui/card"
+"use client"
+
+import { motion } from "motion/react"
+
 import { cn } from "@/lib/utils"
+
+const TONE = {
+  default: { chip: "bg-muted text-muted-foreground", value: "text-foreground" },
+  critical: { chip: "bg-risk-critical/10 text-risk-critical", value: "text-foreground" },
+  success: { chip: "bg-money/10 text-money", value: "text-money" },
+  warning: { chip: "bg-amber/12 text-amber", value: "text-foreground" },
+  primary: { chip: "bg-copper-soft text-copper", value: "text-foreground" },
+  teal: { chip: "bg-blue/10 text-blue", value: "text-foreground" },
+} as const
 
 export function KpiCard({
   label,
@@ -8,36 +20,35 @@ export function KpiCard({
   icon: Icon,
   tone = "default",
   footer,
+  index = 0,
 }: {
   label: string
   value: React.ReactNode
   hint?: React.ReactNode
   icon?: React.ComponentType<{ className?: string }>
-  tone?: "default" | "critical" | "success" | "warning" | "primary"
+  tone?: keyof typeof TONE
   footer?: React.ReactNode
+  index?: number
 }) {
-  const toneClass = {
-    default: "bg-muted text-muted-foreground",
-    critical: "bg-risk-critical/12 text-risk-critical",
-    success: "bg-success/12 text-success",
-    warning: "bg-warning/15 text-warning",
-    primary: "bg-primary/10 text-primary",
-  }[tone]
+  const t = TONE[tone]
   return (
-    <Card className="gap-0 py-0 shadow-xs">
-      <CardContent className="p-5">
-        <div className="flex items-start justify-between gap-3">
-          <p className="text-sm text-muted-foreground">{label}</p>
-          {Icon ? (
-            <div className={cn("flex size-8 shrink-0 items-center justify-center rounded-lg", toneClass)}>
-              <Icon className="size-4" />
-            </div>
-          ) : null}
-        </div>
-        <div className="mt-2 text-2xl font-semibold tracking-tight tabular">{value}</div>
-        {hint ? <div className="mt-1 text-xs text-muted-foreground">{hint}</div> : null}
-        {footer ? <div className="mt-3">{footer}</div> : null}
-      </CardContent>
-    </Card>
+    <motion.div
+      initial={{ opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.55, delay: 0.05 * index, ease: [0.2, 0.8, 0.2, 1] }}
+      className="surface lift flex flex-col p-5"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-sm font-medium text-muted-foreground">{label}</p>
+        {Icon ? (
+          <div className={cn("flex size-8 shrink-0 items-center justify-center rounded-lg", t.chip)}>
+            <Icon className="size-4" />
+          </div>
+        ) : null}
+      </div>
+      <div className={cn("font-display mt-3 text-[1.9rem] leading-none font-bold tabular-nums", t.value)}>{value}</div>
+      {hint ? <div className="mt-2 text-xs leading-relaxed text-muted-foreground">{hint}</div> : null}
+      {footer ? <div className="mt-auto pt-3">{footer}</div> : null}
+    </motion.div>
   )
 }

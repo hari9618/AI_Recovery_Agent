@@ -271,8 +271,16 @@ async def decide(approval_id: uuid.UUID, body: DecisionIn, principal: PrincipalD
 
 
 # ------------------------------------------------------------------------------ copilot
+class CopilotTurn(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(max_length=8000)
+
+
 class CopilotIn(BaseModel):
     question: str = Field(min_length=3, max_length=2000)
+    history: list[CopilotTurn] = Field(
+        default_factory=list, max_length=20, description="Earlier chat turns, oldest first"
+    )
 
 
 @router.post("/copilot/ask")
@@ -285,6 +293,7 @@ async def copilot(body: CopilotIn, principal: PrincipalDep, session: SessionDep)
         actor_id=str(principal.user_id),
         actor_name=principal.name,
         question=body.question,
+        history=[t.model_dump() for t in body.history],
     )
     await session.commit()
     return result

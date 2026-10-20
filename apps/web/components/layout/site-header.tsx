@@ -17,6 +17,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import { AskAiButton } from "@/components/chat/chat-widget"
+import { LiveDot } from "@/components/motion/primitives"
 import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { ApiError, apiGet, apiSend, errorMessage } from "@/lib/api"
@@ -57,29 +59,32 @@ export function SiteHeader() {
   const noTenant = me.error instanceof ApiError && me.error.status === 401
 
   return (
-    <header className="flex h-14 shrink-0 items-center gap-2 border-b bg-background/80 px-4 backdrop-blur">
+    <header className="glass sticky top-0 z-30 flex h-16 shrink-0 items-center gap-3 border-b border-border/70 px-4 md:rounded-t-2xl md:px-6">
       <SidebarTrigger className="-ml-1" />
       <Separator orientation="vertical" className="mr-1 data-[orientation=vertical]:h-4" />
-      <div className="flex min-w-0 items-center gap-2">
-        <span className="truncate text-sm font-medium">{me.data?.company.name ?? "Revenue Recovery"}</span>
+      <div className="flex min-w-0 shrink items-center gap-2.5">
+        <span className="truncate text-sm font-semibold tracking-tight">{me.data?.company.name ?? "Revenue Recovery"}</span>
         {me.data?.company.is_demo ? (
-          <Badge variant="outline" className="border-warning/40 bg-warning/10 text-[11px] text-foreground">
+          <Badge variant="outline" className="hidden rounded-md border-copper/30 bg-copper-soft px-2 font-mono text-[10px] font-medium tracking-[0.08em] text-bronze uppercase sm:inline-flex">
             Synthetic demo data
           </Badge>
         ) : null}
       </div>
-      <div className="ml-auto flex items-center gap-2">
+      <div className="mx-auto min-w-0">
+        <AskAiButton />
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
         {health.data ? (
-          <Badge variant="outline" className="hidden gap-1.5 text-[11px] md:inline-flex">
-            <span className={`size-1.5 rounded-full ${health.data.llm_configured ? "bg-success" : "bg-warning"}`} />
+          <Badge variant="outline" className="hidden gap-1.5 rounded-full bg-card px-2.5 py-1 font-mono text-[10px] 2xl:inline-flex">
+            <LiveDot className={health.data.llm_configured ? "text-success" : "text-warning"} />
             {health.data.llm_configured ? health.data.llm_model : "LLM not configured"}
           </Badge>
         ) : null}
         <Dialog>
           <DialogTrigger asChild>
-            <Button size="sm" variant={noTenant ? "default" : "outline"} disabled={load.isPending}>
+            <Button size="sm" variant={noTenant ? "default" : "outline"} disabled={load.isPending} className="rounded-lg">
               {load.isPending ? <Loader2 className="animate-spin" /> : <Database />}
-              <span className="hidden sm:inline">Load demo dataset</span>
+              <span className="hidden xl:inline">Load demo dataset</span>
             </Button>
           </DialogTrigger>
           <DialogContent>
@@ -111,15 +116,15 @@ export function SiteHeader() {
           <Moon className="dark:hidden" />
         </Button>
         {me.data ? (
-          <div className="hidden items-center gap-2 lg:flex">
-            <div className="flex size-8 items-center justify-center rounded-full bg-accent text-xs font-semibold text-accent-foreground">
+          <div className="flex items-center gap-2.5 border-l pl-3">
+            <div className="flex size-8 items-center justify-center rounded-full bg-gradient-to-br from-copper to-coral text-xs font-semibold text-primary-foreground shadow-sm ring-2 ring-background">
               {me.data.name
                 .split(" ")
                 .map((p) => p[0])
                 .join("")
                 .slice(0, 2)}
             </div>
-            <div className="text-xs leading-tight">
+            <div className="hidden text-xs leading-tight whitespace-nowrap 2xl:block">
               <div className="font-medium">{me.data.name}</div>
               <div className="text-muted-foreground capitalize">{me.data.role.replace("_", " ")}</div>
             </div>

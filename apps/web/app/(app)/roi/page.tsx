@@ -35,7 +35,7 @@ export default function RoiPage() {
           </CardTitle>
           <CardDescription>Counted from the database</CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {Object.entries(data.observed).map(([k, v]) => (
             <div key={k} className="rounded-lg border p-4">
               <p className="text-xs text-muted-foreground">{titleCase(k.replace("_usd_estimated", " (USD, est.)"))}</p>
@@ -53,7 +53,7 @@ export default function RoiPage() {
           </CardTitle>
           <CardDescription>{data.estimated.method}</CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-4 lg:grid-cols-3">
+        <CardContent className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           <div className="rounded-lg border p-4">
             <p className="text-xs text-muted-foreground">Estimated hours saved</p>
             <p className="mt-1 text-2xl font-semibold tabular">{data.estimated.hours_saved} h</p>

@@ -14,7 +14,7 @@ export function RiskBadge({ level, score, className }: { level: RiskLevel | null
   if (!level) return <span className="text-muted-foreground">—</span>
   const s = RISK_STYLE[level]
   return (
-    <Badge variant="outline" className={cn("gap-1 font-semibold", s.badge, className)}>
+    <Badge variant="outline" className={cn("gap-1.5 rounded-full font-semibold", s.badge, className)}>
       <span className={cn("size-1.5 rounded-full", s.bar)} />
       {s.label}
       {score !== undefined && score !== null ? <span className="tabular font-normal opacity-80">· {score}</span> : null}
@@ -26,10 +26,13 @@ export function RiskBadge({ level, score, className }: { level: RiskLevel | null
 export function RiskMeter({ score, level, className }: { score: number; level: RiskLevel; className?: string }) {
   return (
     <div className={cn("flex items-center gap-3", className)}>
-      <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-muted">
-        <div className={cn("h-full rounded-full transition-all", RISK_STYLE[level].bar)} style={{ width: `${Math.min(score, 100)}%` }} />
+      <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+        <div className={cn("bar-grow h-full rounded-full", RISK_STYLE[level].bar)} style={{ width: `${Math.min(score, 100)}%` }} />
       </div>
-      <span className="shrink-0 whitespace-nowrap text-right text-sm font-semibold tabular">{score} / 100</span>
+      <span className="money shrink-0 text-right text-sm font-semibold whitespace-nowrap">
+        {score}
+        <span className="text-xs font-normal text-muted-foreground">/100</span>
+      </span>
     </div>
   )
 }
@@ -40,7 +43,7 @@ export function ReasonList({ reasons, compact = false }: { reasons: Reason[]; co
     <ul className="space-y-2">
       {reasons.map((r) => (
         <li key={r.code} className="flex items-start gap-3">
-          <span className="mt-0.5 inline-flex h-5 min-w-9 items-center justify-center rounded-md bg-muted px-1.5 text-[11px] font-semibold tabular">
+          <span className="money mt-0.5 inline-flex h-5 min-w-9 items-center justify-center rounded-md bg-risk-critical/10 px-1.5 text-[11px] font-semibold text-risk-critical">
             +{r.points}
           </span>
           <div className="min-w-0 flex-1">

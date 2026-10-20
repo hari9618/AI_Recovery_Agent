@@ -1,5 +1,7 @@
 import type { NextRequest } from "next/server"
 
+import { ACCESS_COOKIE, hasValidAccess } from "@/lib/access"
+
 /**
  * Server-side proxy to the FastAPI backend.
  *
@@ -10,7 +12,17 @@ const API_BASE_URL = process.env.API_BASE_URL ?? "http://localhost:8000"
 const API_TOKEN = process.env.API_TOKEN ?? ""
 const FORWARD_HEADERS = ["content-type", "accept", "x-request-id"]
 
+// Copilot answers and the demo loader can take tens of seconds on a hosted API.
+export const maxDuration = 120
+
 async function forward(req: NextRequest, path: string[]) {
+  // Defence in depth: proxy.ts already gates every request, but this route holds the API token.
+  if (!hasValidAccess(req.cookies.get(ACCESS_COOKIE)?.value)) {
+    return Response.json(
+      { error: { code: "unauthenticated", category: "access", message: "Access code required", retryable: false } },
+      { status: 401 },
+    )
+  }
   const target = new URL(`/api/v1/${path.map(encodeURIComponent).join("/")}`, API_BASE_URL)
   target.search = req.nextUrl.search
 

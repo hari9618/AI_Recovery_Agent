@@ -9,6 +9,7 @@ import { toast } from "sonner"
 import { z } from "zod"
 
 import { PageHeader } from "@/components/shared/page-header"
+import { SlackCard } from "@/components/shared/slack-card"
 import { ErrorState, LoadingBlock } from "@/components/shared/states"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -112,6 +113,7 @@ export default function SettingsPage() {
   if (error) return <ErrorState error={error} />
 
   return (
+    <>
     <form onSubmit={form.handleSubmit((v) => save.mutate(v as z.output<typeof schema>))}>
       <PageHeader
         title="Settings"
@@ -122,13 +124,13 @@ export default function SettingsPage() {
           </Button>
         }
       />
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>Approval policy</CardTitle>
             <CardDescription>What the AI may do automatically vs. what needs a human</CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-4 sm:grid-cols-2">
+          <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <NumField id="max_discount_without_approval_pct" label="Max discount without approval (%)" form={form} />
             <NumField id="max_discount_manager_pct" label="Max discount a manager can approve (%)" hint="Above this needs the owner" form={form} />
             <NumField id="refund_approval_threshold" label="Refund threshold needing owner (₹)" form={form} />
@@ -148,7 +150,7 @@ export default function SettingsPage() {
             <CardTitle>Risk levels</CardTitle>
             <CardDescription>Score cut-offs for the deterministic Revenue Risk Engine (0–100)</CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-4 sm:grid-cols-3">
+          <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <NumField id="critical" label="Critical ≥" form={form} step="1" />
             <NumField id="high" label="High ≥" form={form} step="1" />
             <NumField id="medium" label="Medium ≥" form={form} step="1" />
@@ -159,7 +161,7 @@ export default function SettingsPage() {
             <CardTitle>ROI assumptions</CardTitle>
             <CardDescription>Used only for figures labelled “Estimated”</CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-4 sm:grid-cols-2">
+          <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <NumField id="minutes_saved_per_deal_review" label="Minutes saved per deal review" form={form} />
             <NumField id="minutes_saved_per_draft" label="Minutes saved per drafted message" form={form} />
             <NumField id="minutes_saved_per_followup_created" label="Minutes saved per follow-up created" form={form} />
@@ -182,5 +184,7 @@ export default function SettingsPage() {
         </Card>
       </div>
     </form>
+    <SlackCard />
+    </>
   )
 }

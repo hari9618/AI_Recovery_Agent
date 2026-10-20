@@ -9,6 +9,7 @@ import { ApprovalActions } from "@/components/agent/approval-actions"
 import { RecommendationPanel } from "@/components/agent/recommendation-panel"
 import { RiskBadge } from "@/components/risk/risk"
 import { PageHeader } from "@/components/shared/page-header"
+import { SlackStatus } from "@/components/shared/slack-card"
 import { EmptyState, ErrorState, LoadingBlock } from "@/components/shared/states"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -28,6 +29,7 @@ export default function ApprovalsPage() {
       <PageHeader
         title="Approval Center"
         description="Customer-facing and commercial actions wait here. Every request shows what the AI recommends, why, the evidence, and which policy rule requires a human."
+        actions={<SlackStatus />}
       />
       <Tabs value={status} onValueChange={(v) => setStatus(v as typeof status)} className="mb-4">
         <TabsList>

@@ -50,7 +50,7 @@ export default function ObservabilityPage() {
         description="Langfuse traces every agent run, generation, retrieval step and tool call. Usage below comes from the local ledger, so cost and latency stay visible even when Langfuse is off."
       />
       {status.error ? <ErrorState error={status.error} /> : null}
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -104,7 +104,7 @@ export default function ObservabilityPage() {
       {usage.isLoading ? <LoadingBlock rows={4} className="mt-6 space-y-3" /> : null}
       {usage.data ? (
         <>
-          <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <KpiCard label="LLM calls (30 days)" value={formatNumber(usage.data.totals.llm_calls)} icon={Activity} tone="primary" />
             <KpiCard label="Tokens" value={formatNumber(usage.data.totals.input_tokens + usage.data.totals.output_tokens)} hint={`${formatNumber(usage.data.totals.input_tokens)} in · ${formatNumber(usage.data.totals.output_tokens)} out`} />
             <KpiCard label="Estimated LLM cost" value={`$${usage.data.totals.estimated_cost_usd.toFixed(4)}`} hint="From published per-token prices; provider invoice is authoritative" />
@@ -114,7 +114,7 @@ export default function ObservabilityPage() {
               hint="Calls that errored or fell back after invalid structured output"
             />
           </div>
-          <div className="mt-6 grid gap-4 lg:grid-cols-2">
+          <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
             <Card>
               <CardHeader>
                 <CardTitle>Daily tokens</CardTitle>

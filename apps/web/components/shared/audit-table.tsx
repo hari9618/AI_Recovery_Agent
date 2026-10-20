@@ -66,7 +66,7 @@ export function AuditTable({ entries, showCustomer = false }: { entries: AuditEn
                     <TableRow className="bg-muted/30 hover:bg-muted/30">
                       <TableCell />
                       <TableCell colSpan={showCustomer ? 6 : 5} className="py-3">
-                        <div className="grid gap-3 text-xs md:grid-cols-2">
+                        <div className="grid grid-cols-1 gap-3 text-xs md:grid-cols-2">
                           <div>
                             <p className="mb-1 font-semibold">Input</p>
                             <pre className="max-h-64 overflow-auto rounded bg-background p-2">{JSON.stringify(e.input, null, 2)}</pre>

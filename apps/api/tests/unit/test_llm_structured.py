@@ -97,3 +97,15 @@ def test_strict_schema_meets_strict_mode_rules():
         if node.get("type") == "object":
             assert node["additionalProperties"] is False
             assert set(node["required"]) == set(node["properties"])
+
+
+def test_strict_schema_keeps_fields_named_like_keywords():
+    # Regression: the keyword filter used to drop a *field* called "title", so the live model was never
+    # asked for it and every recommendation failed validation.
+    from app.prompts.recommendation import RecommendationDraft  # noqa: PLC0415
+
+    schema = strict_json_schema(RecommendationDraft)
+    assert "title" in schema["properties"]
+    assert "title" in schema["required"]
+    assert set(schema["required"]) == set(RecommendationDraft.model_fields)
+    assert "title" not in schema["properties"]["title"]  # the keyword itself is still stripped

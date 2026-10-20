@@ -138,7 +138,7 @@ export default function KnowledgePage() {
                 </div>
                 <CardTitle className="text-base">{ask.data.question}</CardTitle>
               </CardHeader>
-              <CardContent className="grid gap-6 lg:grid-cols-2">
+              <CardContent className="grid grid-cols-1 gap-6 lg:grid-cols-2">
                 <div className="space-y-4">
                   {ask.data.answer ? <p className="text-sm leading-relaxed">{ask.data.answer}</p> : null}
                   {ask.data.status === "INSUFFICIENT_EVIDENCE" ? (

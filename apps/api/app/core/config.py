@@ -9,11 +9,29 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, Literal
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import AliasChoices, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
+
+
+def normalise_database_url(url: str) -> str:
+    """Accept the connection strings hosting providers hand out (Neon, Supabase, Render, Heroku).
+
+    `postgres://` / `postgresql://` become the asyncpg driver URL, libpq's `sslmode=` becomes asyncpg's `ssl=`,
+    and libpq-only options asyncpg would reject (`channel_binding`) are dropped.
+    """
+    parts = urlsplit(url.strip())
+    scheme = "postgresql+asyncpg" if parts.scheme in ("postgres", "postgresql") else parts.scheme
+    query = []
+    for key, value in parse_qsl(parts.query, keep_blank_values=True):
+        if key == "sslmode":
+            query.append(("ssl", value))
+        elif key != "channel_binding":
+            query.append((key, value))
+    return urlunsplit((scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
 
 
 class Settings(BaseSettings):
@@ -33,6 +51,7 @@ class Settings(BaseSettings):
     # --- data stores ---------------------------------------------------------------------
     database_url: str = "postgresql+asyncpg://postgres@127.0.0.1:5433/revenue_recovery"
     database_echo: bool = False
+    database_pool_size: int = 10
     redis_url: str | None = None
 
     # --- auth (authentication-ready; demo token for local use) --------------------------
@@ -60,8 +79,19 @@ class Settings(BaseSettings):
     # --- observability -------------------------------------------------------------------
     langfuse_public_key: str | None = None
     langfuse_secret_key: SecretStr | None = None
-    langfuse_host: str = "https://cloud.langfuse.com"
+    # LANGFUSE_HOST, or LANGFUSE_BASE_URL (the name newer Langfuse docs use). Must match the key's region.
+    langfuse_host: str = Field(
+        default="https://cloud.langfuse.com",
+        validation_alias=AliasChoices("langfuse_host", "langfuse_base_url"),
+    )
     langfuse_environment: str = "development"
+
+    # --- notifications ---------------------------------------------------------------------
+    # Slack incoming-webhook URL (https://hooks.slack.com/services/...). Optional: without it nothing is posted.
+    slack_webhook_url: SecretStr | None = None
+    slack_timeout_seconds: float = 5.0
+    # Where links in notifications point (the web app, not the API).
+    app_public_url: str = "http://localhost:3100"
 
     # --- RAG -----------------------------------------------------------------------------
     embedding_model: str = "BAAI/bge-small-en-v1.5"
@@ -92,6 +122,11 @@ class Settings(BaseSettings):
     demo_seed: int = 20241019
     demo_company_name: str = "Arcline Systems"
 
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def _normalise_database_url(cls, value: object) -> object:
+        return normalise_database_url(value) if isinstance(value, str) else value
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def _split_origins(cls, value: object) -> object:
@@ -102,6 +137,10 @@ class Settings(BaseSettings):
     @property
     def llm_configured(self) -> bool:
         return bool(self.groq_api_key and self.groq_api_key.get_secret_value() and self.groq_model)
+
+    @property
+    def slack_configured(self) -> bool:
+        return bool(self.slack_webhook_url and self.slack_webhook_url.get_secret_value().strip())
 
     @property
     def langfuse_configured(self) -> bool:

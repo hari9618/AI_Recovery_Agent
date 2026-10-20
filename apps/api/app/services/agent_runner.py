@@ -35,6 +35,7 @@ from app.domain.enums import (
     UserRole,
 )
 from app.domain.policy import ActionProposal, evaluate
+from app.integrations.slack import notify_approval_decided, notify_approval_requested
 from app.llm.ledger import llm_call_context
 from app.observability.tracing import get_tracer
 from app.security.auth import Principal
@@ -212,6 +213,9 @@ async def execute_run(
         await session.commit()
     await invalidate_company(principal.company_id)
     tracer.flush()
+    # Alert the sales team only after the approval request is committed (so the links resolve).
+    if status == AgentRunStatus.AWAITING_APPROVAL and final.get("approval_request_id"):
+        await notify_approval_requested(uuid.UUID(str(final["approval_request_id"])))
     return {"run_id": str(run_id), "status": status.value, "error": error}
 
 
@@ -276,6 +280,7 @@ async def decide_approval(
                 agent_run_id=rec.agent_run_id,
             )
             await session.commit()
+            await notify_approval_decided(approval.id, decision="reject", decided_by=principal.name)
             return {"approval_id": str(approval.id), "status": "rejected"}
 
         state: dict[str, Any] = dict(run.state) if run and run.state else {}
@@ -375,6 +380,9 @@ async def decide_approval(
             )
         await session.commit()
     tracer.flush()
+    await notify_approval_decided(
+        approval_id, decision="approve", decided_by=principal.name, execution=final.get("execution_result")
+    )
     return {
         "approval_id": str(approval_id),
         "status": "approved",

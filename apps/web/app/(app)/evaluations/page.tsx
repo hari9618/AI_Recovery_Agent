@@ -76,7 +76,7 @@ export default function EvaluationsPage() {
       />
       {summary.isLoading ? <LoadingBlock rows={6} /> : null}
       {summary.error ? <ErrorState error={summary.error} /> : null}
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {SUITES.map((s) => {
           const run = summary.data?.suites[s.key]
           return (
@@ -217,7 +217,7 @@ export default function EvaluationsPage() {
                       <TableRow className="bg-muted/30 hover:bg-muted/30">
                         <TableCell />
                         <TableCell colSpan={3}>
-                          <div className="grid gap-3 py-2 text-xs md:grid-cols-2">
+                          <div className="grid grid-cols-1 gap-3 py-2 text-xs md:grid-cols-2">
                             <div>
                               <p className="mb-1 font-semibold">Expected</p>
                               <pre className="max-h-72 overflow-auto rounded bg-background p-2">{JSON.stringify(r.expected, null, 2)}</pre>

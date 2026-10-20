@@ -43,11 +43,11 @@ export function EmptyState({
   icon?: React.ComponentType<{ className?: string }>
 }) {
   return (
-    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed px-6 py-12 text-center">
-      <div className="mb-3 flex size-10 items-center justify-center rounded-full bg-muted">
-        <Icon className="size-5 text-muted-foreground" />
+    <div className="bg-dots flex flex-col items-center justify-center rounded-2xl border border-dashed px-6 py-14 text-center">
+      <div className="mb-4 flex size-12 items-center justify-center rounded-2xl border bg-card shadow-[var(--shadow-soft)]">
+        <Icon className="size-5 text-primary" />
       </div>
-      <p className="font-medium">{title}</p>
+      <p className="font-display text-lg font-semibold">{title}</p>
       {description ? <p className="mt-1 max-w-md text-sm text-muted-foreground">{description}</p> : null}
       {action ? <div className="mt-4">{action}</div> : null}
     </div>

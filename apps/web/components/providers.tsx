@@ -1,6 +1,7 @@
 "use client"
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
+import { MotionConfig } from "motion/react"
 import { ThemeProvider } from "next-themes"
 import { useState } from "react"
 
@@ -25,10 +26,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
       <QueryClientProvider client={client}>
-        <TooltipProvider delayDuration={200}>
-          {children}
-          <Toaster richColors closeButton position="top-right" />
-        </TooltipProvider>
+        <MotionConfig reducedMotion="user">
+          <TooltipProvider delayDuration={200}>
+            {children}
+            <Toaster richColors closeButton position="top-right" />
+          </TooltipProvider>
+        </MotionConfig>
       </QueryClientProvider>
     </ThemeProvider>
   )

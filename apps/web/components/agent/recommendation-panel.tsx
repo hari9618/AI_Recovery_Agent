@@ -88,7 +88,7 @@ export function RecommendationPanel({ rec }: { rec: Recommendation }) {
         </div>
         <CardTitle className="text-lg leading-snug">{rec.title}</CardTitle>
       </CardHeader>
-      <CardContent className="grid gap-6 lg:grid-cols-2">
+      <CardContent className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="space-y-5">
           <Section icon={FileText} title="What happened">
             {rec.what_happened}
@@ -107,7 +107,7 @@ export function RecommendationPanel({ rec }: { rec: Recommendation }) {
               <Badge variant="secondary">{titleCase(rec.action_type)}</Badge>
               {primary?.discount_pct ? <Badge variant="secondary">{primary.discount_pct}% discount</Badge> : null}
               {(rec.proposed_action.internal ?? []).map((a) => (
-                <Badge key={a.title} variant="outline" className="text-[11px]">
+                <Badge key={a.title} variant="outline" className="h-auto max-w-full shrink py-0.5 text-left text-[11px] whitespace-normal">
                   + internal task: {a.title}
                 </Badge>
               ))}

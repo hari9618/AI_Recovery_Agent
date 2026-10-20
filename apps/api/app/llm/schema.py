@@ -42,7 +42,14 @@ def _inline_refs(node: Any, defs: dict[str, Any]) -> Any:
 
 def _strictify(node: Any) -> Any:
     if isinstance(node, dict):
-        node = {k: _strictify(v) for k, v in node.items() if k not in _DROP_KEYS}
+        out: dict[str, Any] = {}
+        for key, value in node.items():
+            if key == "properties" and isinstance(value, dict):
+                # Field names, not keywords: a field may legitimately be called "title" or "format".
+                out[key] = {name: _strictify(sub) for name, sub in value.items()}
+            elif key not in _DROP_KEYS:
+                out[key] = _strictify(value)
+        node = out
         if node.get("type") == "object" and "properties" in node:
             node["required"] = list(node["properties"].keys())
             node["additionalProperties"] = False
