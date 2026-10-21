@@ -11,10 +11,12 @@ from pathlib import Path
 from typing import Annotated, Literal
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from pydantic import AliasChoices, Field, SecretStr, field_validator
+from pydantic import AliasChoices, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
+# Public placeholder from the repo; fine locally, never accepted in production.
+DEFAULT_DEMO_API_TOKEN = "dev-demo-token-change-me"
 
 
 def normalise_database_url(url: str) -> str:
@@ -55,7 +57,7 @@ class Settings(BaseSettings):
     redis_url: str | None = None
 
     # --- auth (authentication-ready; demo token for local use) --------------------------
-    demo_api_token: SecretStr = SecretStr("dev-demo-token-change-me")
+    demo_api_token: SecretStr = SecretStr(DEFAULT_DEMO_API_TOKEN)
     auth_disabled: bool = False
 
     # --- LLM -----------------------------------------------------------------------------
@@ -133,6 +135,13 @@ class Settings(BaseSettings):
         if isinstance(value, str) and not value.startswith("["):
             return [v.strip() for v in value.split(",") if v.strip()]
         return value
+
+    @model_validator(mode="after")
+    def _require_real_token_in_production(self) -> Settings:
+        token = self.demo_api_token.get_secret_value().strip()
+        if self.environment == "production" and (not token or token == DEFAULT_DEMO_API_TOKEN):
+            raise ValueError("DEMO_API_TOKEN must be set to a private random value in production")
+        return self
 
     @property
     def llm_configured(self) -> bool:
