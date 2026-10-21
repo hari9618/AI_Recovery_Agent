@@ -6,9 +6,9 @@ services:
     runtime: docker
     dockerfilePath: ./apps/api/Dockerfile
     dockerContext: .
-    # Starter keeps the service awake and has room for the two local ONNX models; "free" sleeps after 15 min
-    # idle and has 512 MB RAM.
-    plan: starter
+    # Free: no card needed. Sleeps after 15 min idle (first request then takes ~1 min) and has 512 MB RAM.
+    # Switch to "starter" (~$7/month) for an always-on demo, or if the service restarts for memory.
+    plan: free
     region: singapore
     healthCheckPath: /api/v1/health
     autoDeploy: true
@@ -22,6 +22,9 @@ services:
         sync: false
       - key: DATABASE_POOL_SIZE
         value: "5"
+      # Keep the local ONNX models' thread pools (and memory) small on the 512 MB instance.
+      - key: OMP_NUM_THREADS
+        value: "1"
       # Shared secret between the web app's server-side proxy and this API. Copy it into Vercel as API_TOKEN.
       - key: DEMO_API_TOKEN
         generateValue: true
